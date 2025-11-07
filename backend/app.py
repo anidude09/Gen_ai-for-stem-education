@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
+
 from routes import detect, llm,auth, regions_detect
 
 app = FastAPI()
@@ -16,3 +18,13 @@ app.include_router(detect.router, prefix="/detect", tags=["Detection"])
 app.include_router(llm.router, prefix="/llm", tags=["LLM"])
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(regions_detect.router, prefix="/detect", tags=["Region Detection"])
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+@app.get("/", tags=["Root"])
+def read_root():
+    return JSONResponse({"message": "Backend is running !"})
+
+

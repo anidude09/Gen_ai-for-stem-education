@@ -37,7 +37,7 @@ A comprehensive web application designed to enhance education through the power 
 
    ```bash
    cd backend
-   python -m uvicorn main:app --reload --port 8001
+   python -m uvicorn app:app --reload --port 8001
 
    ```
 
