@@ -56,7 +56,7 @@ function ImageCanvas({
       const formData = new FormData();
       formData.append("file", blob, "image.png");
 
-      const res = await fetch("http://localhost:8001/detect/", {
+      const res = await fetch("/detect/", {
         method: "POST",
         body: formData,
       });

@@ -17,7 +17,7 @@ function Popup({ selectedShape, onClose, zoom = 1 }) {
   useEffect(() => {
     if (!selectedShape || selectedShape.r) return;
     setInfo("Loading...");
-    fetch("http://localhost:8001/llm/generate_info/", {
+    fetch("/llm/generate_info/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: selectedShape.text || "Unlabeled text" }),

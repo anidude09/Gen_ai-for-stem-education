@@ -56,7 +56,7 @@ function Page() {
         const formData = new FormData();
         formData.append("file", blob, "page.png");
 
-        const resp = await fetch("http://localhost:8001/detect/", {
+        const resp = await fetch("/detect/", {
           method: "POST",
           body: formData,
         });

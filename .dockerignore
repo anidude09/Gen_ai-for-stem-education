@@ -1,0 +1,35 @@
+# Node & Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+*.pid
+
+# Virtual envs
+venv/
+env/
+.venv/
+
+# Node modules
+node_modules/
+app/node_modules/
+
+# Git & local config
+.git/
+.gitignore
+.gitattributes
+.lfsconfig
+
+# OS / IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# HF build logs
+output.log

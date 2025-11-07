@@ -23,7 +23,7 @@ function LoginForm({ setUser, setSessionId }) {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:8001/auth/login", {
+      const response = await fetch("/auth/login", {
         method: "POST",
         body: new URLSearchParams({ name, email }),
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
