@@ -11,6 +11,7 @@ app/.env.*.local
 backend/.env
 backend/__pycache__/
 backend/*.pyc
+backend/routes/__pycache__/
 
 stem/
 

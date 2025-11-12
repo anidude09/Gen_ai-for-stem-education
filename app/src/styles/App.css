@@ -93,3 +93,63 @@
   padding-left: 0;       
   margin: 0;            
 }
+
+/* Indeterminate loading bar shown during detection */
+.loading-bar {
+  position: relative;
+  width: 240px;
+  height: 4px;
+  background-color: #e5e7eb; /* gray-200 */
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 6px auto 10px auto;
+}
+
+.loading-bar__indeterminate {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background-color: #3b82f6; /* blue-500 */
+  border-radius: 2px;
+  animation: loading-indeterminate 1.2s infinite ease-in-out;
+}
+
+@keyframes loading-indeterminate {
+  0% {
+    left: -40%;
+    width: 40%;
+  }
+  50% {
+    left: 20%;
+    width: 60%;
+  }
+  100% {
+    left: 100%;
+    width: 40%;
+  }
+}
+
+/* Detect button styling */
+.detect-button {
+  appearance: none;
+  border: 1px solid #d1d5db; /* gray-300 */
+  background-color: #ffffff;
+  color: #111827; /* gray-900 */
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, box-shadow 120ms ease-out, color 120ms ease-out;
+}
+.detect-button:hover:not(:disabled) {
+  background-color: #f9fafb; /* gray-50 */
+  border-color: #cbd5e1; /* gray-300/400 */
+}
+.detect-button:active:not(:disabled) {
+  background-color: #f3f4f6; /* gray-100 */
+}
+.detect-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -11,7 +11,7 @@
  */
 
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import ShapeOverlay from "./ShapeOverlay";
 import Popup from "./Popup";
 import ZoomControls from "./ZoomControls";
@@ -36,6 +36,7 @@ function ImageCanvas({
 }) {
   const wrapperRef = useRef(null);
   const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
+  const [isDetecting, setIsDetecting] = useState(false);
 
   const handleImageLoad = async () => {
     if (!imgRef.current) return;
@@ -54,6 +55,8 @@ function ImageCanvas({
 
   const runDetection = async () => {
     try {
+      setError(null);
+      setIsDetecting(true);
       if (!imageUrl || !imageInfo) {
         throw new Error("Image not ready. Please wait for it to load.");
       }
@@ -97,6 +100,9 @@ function ImageCanvas({
       setError(`Failed to detect shapes: ${err.message}`);
       console.error(err);
     }
+    finally {
+      setIsDetecting(false);
+    }
   };
 
   return (
@@ -104,10 +110,21 @@ function ImageCanvas({
       <ZoomControls zoom={zoom} zoomIn={zoomIn} zoomOut={zoomOut} />
 
       <div style={{ margin: "8px 0" }}>
-        <button onClick={runDetection} disabled={!imageInfo}>
-          Detect
+        <button
+          onClick={runDetection}
+          disabled={!imageInfo || isDetecting}
+          className="detect-button"
+          aria-busy={isDetecting ? "true" : "false"}
+        >
+          {isDetecting ? "Detecting..." : "Detect"}
         </button>
       </div>
+
+      {isDetecting && (
+        <div className="loading-bar" role="status" aria-label="Detecting">
+          <div className="loading-bar__indeterminate"></div>
+        </div>
+      )}
 
       <div
         className="image-container"
