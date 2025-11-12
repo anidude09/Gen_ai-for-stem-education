@@ -50,8 +50,14 @@ function ImageCanvas({
     };
     setImageInfo(info);
     setLoaded(true);
+  };
 
+  const runDetection = async () => {
     try {
+      if (!imageUrl || !imageInfo) {
+        throw new Error("Image not ready. Please wait for it to load.");
+      }
+
       const blob = await fetch(imageUrl).then((r) => r.blob());
       const formData = new FormData();
       formData.append("file", blob, "image.png");
@@ -72,17 +78,17 @@ function ImageCanvas({
 
       const scaledCircles = rawCircles.map((c) => ({
         ...c,
-        x: c.x * info.scaleX,
-        y: c.y * info.scaleY,
-        r: c.r * Math.min(info.scaleX, info.scaleY),
+        x: c.x * imageInfo.scaleX,
+        y: c.y * imageInfo.scaleY,
+        r: c.r * Math.min(imageInfo.scaleX, imageInfo.scaleY),
       }));
 
       const scaledTexts = rawTexts.map((t) => ({
         ...t,
-        x1: t.x1 * info.scaleX,
-        y1: t.y1 * info.scaleY,
-        x2: t.x2 * info.scaleX,
-        y2: t.y2 * info.scaleY,
+        x1: t.x1 * imageInfo.scaleX,
+        y1: t.y1 * imageInfo.scaleY,
+        x2: t.x2 * imageInfo.scaleX,
+        y2: t.y2 * imageInfo.scaleY,
       }));
 
       setCircles(scaledCircles);
@@ -96,6 +102,12 @@ function ImageCanvas({
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <ZoomControls zoom={zoom} zoomIn={zoomIn} zoomOut={zoomOut} />
+
+      <div style={{ margin: "8px 0" }}>
+        <button onClick={runDetection} disabled={!imageInfo}>
+          Detect
+        </button>
+      </div>
 
       <div
         className="image-container"

@@ -28,7 +28,7 @@ function MainPage() {
   const handleLogout = useLogout(sessionId, setUser, setSessionId, setImageUrl);
 
   // Auto logout (inactivity + tab close)
-  useautoLogout(sessionId, handleLogout,  10 * 1000);
+  useautoLogout(sessionId, handleLogout,  50 * 10 * 1000);
 
   return (
     <div className="container">
