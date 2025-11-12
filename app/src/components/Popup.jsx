@@ -17,7 +17,7 @@ function Popup({ selectedShape, onClose, zoom = 1 }) {
   useEffect(() => {
     if (!selectedShape || selectedShape.r) return;
     setInfo("Loading...");
-    fetch("http://localhost:8001/llm/generate_info/", {
+    fetch("http://localhost:8001/llm/generate_info_structured/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: selectedShape.text || "Unlabeled text" }),
@@ -26,7 +26,7 @@ function Popup({ selectedShape, onClose, zoom = 1 }) {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return res.json();
       })
-      .then((data) => setInfo(data.info))
+      .then((data) => setInfo(data))
       .catch((error) => {
         console.error("LLM fetch error:", error);
         setInfo("Error generating info");
@@ -143,9 +143,60 @@ function Popup({ selectedShape, onClose, zoom = 1 }) {
           <p>
             <strong>Text:</strong> {selectedShape.text || "Text"}
           </p>
-          <p>
-            <strong>Info:</strong> {info || "Click to generate info"}
-          </p>
+
+          {typeof info === "string" ? (
+            <p>
+              <strong>Info:</strong> {info || "Click to generate info"}
+            </p>
+          ) : info ? (
+            <div>
+              {Array.isArray(info.summary) && info.summary.length > 0 && (
+                <div style={{ marginBottom: "8px" }}>
+                  <strong>Summary:</strong>
+                  <ul style={{ marginTop: "6px" }}>
+                    {info.summary.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {Array.isArray(info.key_terms) && info.key_terms.length > 0 && (
+                <div style={{ marginBottom: "8px" }}>
+                  <strong>Key Terms:</strong>
+                  <ul style={{ marginTop: "6px" }}>
+                    {info.key_terms.map((t, idx) => (
+                      <li key={idx}>
+                        <em>{t.term}</em>: {t.definition}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {Array.isArray(info.unit_conversions) && info.unit_conversions.length > 0 && (
+                <div style={{ marginBottom: "8px" }}>
+                  <strong>Unit Conversions:</strong>
+                  <ul style={{ marginTop: "6px" }}>
+                    {info.unit_conversions.map((u, idx) => (
+                      <li key={idx}>
+                        {u.original} → {u.si}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {info.clarifying_question && (
+                <div style={{ marginTop: "6px", fontStyle: "italic" }}>
+                  {info.clarifying_question}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p>Click to generate info</p>
+          )}
+
           <button
             onClick={onClose}
             style={{

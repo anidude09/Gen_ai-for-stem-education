@@ -16,12 +16,20 @@ import cv2
 import numpy as np
 import easyocr
 import re
+import torch
+
+print(torch.cuda.is_available())
+if torch.cuda.is_available():
+    print("cuda is available  on device: ", torch.cuda.get_device_name(0))
+
+
 
 # Initialize FastAPI router for detection-related endpoints
 router = APIRouter()
 
 # Initialize EasyOCR reader (supports English by default)
-reader = easyocr.Reader(['en'])
+reader = easyocr.Reader(['en'], gpu=True)
+
 
 
 def detect_circles_with_text_from_image_bytes(image_bytes):
