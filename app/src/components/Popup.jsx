@@ -11,7 +11,7 @@
 
 import { useState, useEffect } from "react";
 
-function Popup({ selectedShape, onClose, zoom = 1 }) {
+function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage }) {
   const [info, setInfo] = useState(null);
 
   useEffect(() => {
@@ -52,18 +52,36 @@ function Popup({ selectedShape, onClose, zoom = 1 }) {
     e.preventDefault();
     e.stopPropagation();
 
+    console.log("Go to page button clicked", {
+      pageNumber,
+      circleText,
+      hasNavigateHandler: !!onNavigateToPage,
+    });
+
     if (!pageNumber) {
       console.log("Missing navigation data:", { pageNumber });
       return;
     }
 
     const pageImageUrl = `/images/${pageNumber}.png`;
-    let targetUrl = `/page?image=${encodeURIComponent(pageImageUrl)}`;
-    if (circleText) {
-      targetUrl += `&circle=${encodeURIComponent(circleText)}`;
+
+    if (onNavigateToPage) {
+      // Let the parent (MainPage) handle switching tabs / images.
+      onNavigateToPage(pageImageUrl, pageNumber, circleText);
+    } else {
+      // Fallback: direct navigation if no handler is provided.
+      let targetUrl = `/page?image=${encodeURIComponent(pageImageUrl)}`;
+      if (circleText) {
+        targetUrl += `&circle=${encodeURIComponent(circleText)}`;
+      }
+      console.log("Fallback navigation to detail page:", {
+        targetUrl,
+        pageImageUrl,
+        circleText,
+      });
+      window.location.href = targetUrl;
     }
 
-    window.open(targetUrl, "_blank", "noopener,noreferrer");
     onClose();
   };
 
@@ -126,6 +144,28 @@ function Popup({ selectedShape, onClose, zoom = 1 }) {
           ) : (
             <p>No page number available for navigation.</p>
           )}
+
+          {/* Debug: show raw OCR tokens for this circle */}
+          {(selectedShape.raw_texts_top || selectedShape.raw_texts_bottom) && (
+            <div style={{ marginTop: "10px", fontSize: "0.8rem" }}>
+              <strong>OCR Debug:</strong>
+              {Array.isArray(selectedShape.raw_texts_top) &&
+                selectedShape.raw_texts_top.length > 0 && (
+                  <div>
+                    <em>Top (circle) text:</em>{" "}
+                    {selectedShape.raw_texts_top.join(" | ")}
+                  </div>
+                )}
+              {Array.isArray(selectedShape.raw_texts_bottom) &&
+                selectedShape.raw_texts_bottom.length > 0 && (
+                  <div>
+                    <em>Bottom (page) text:</em>{" "}
+                    {selectedShape.raw_texts_bottom.join(" | ")}
+                  </div>
+                )}
+            </div>
+          )}
+
           <button
             onClick={onClose}
             style={{

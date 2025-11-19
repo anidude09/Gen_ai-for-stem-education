@@ -33,6 +33,7 @@ function ImageCanvas({
   texts,
   setSelectedShape,
   selectedShape,
+  onNavigateToPage,
 }) {
   const wrapperRef = useRef(null);
   const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
@@ -304,6 +305,7 @@ function ImageCanvas({
                   selectedShape={selectedShape}
                   onClose={() => setSelectedShape(null)}
                   zoom={zoom}
+                  onNavigateToPage={onNavigateToPage}
                 />
               )}
             </>

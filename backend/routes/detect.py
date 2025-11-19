@@ -20,6 +20,15 @@ import os
 import pytesseract
 from pytesseract import Output
 
+# EasyOCR is used specifically for tiny circle callout text, where it tends
+# to outperform Tesseract. If it's not installed, we fall back to Tesseract.
+try:
+    import easyocr  # type: ignore
+
+    _EASYOCR_READER = easyocr.Reader(["en"], gpu=False)
+except Exception:
+    _EASYOCR_READER = None
+
 # Configure Tesseract binary location.
 # Prefer environment variable for portability; fall back to your known local path.
 DEFAULT_TESSERACT_CMD = r"C:\Users\aniruddh\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
@@ -30,21 +39,25 @@ pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
 MIN_CONFIDENCE = 60.0  # minimum Tesseract confidence to keep a box
 MIN_BOX_WIDTH = 10     # ignore very tiny boxes (pixels)
 MIN_BOX_HEIGHT = 10
+EASYOCR_MIN_CONFIDENCE = 0.3  # EasyOCR confidence threshold for circle text
 
 # Initialize FastAPI router for detection-related endpoints
 router = APIRouter()
 
 
-def _tess_image_to_data(img_bgr, psm: str = "6"):
+def _tess_image_to_data(img_bgr, psm: str = "6", extra_config: str = ""):
     """
     Helper to run Tesseract's image_to_data on a BGR OpenCV image and
     return the parsed dictionary.
     """
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    config = f"--oem 3 --psm {psm}"
+    if extra_config:
+        config = f"{config} {extra_config}"
     return pytesseract.image_to_data(
         img_rgb,
         lang="eng",
-        config=f"--oem 3 --psm {psm}",
+        config=config,
         output_type=Output.DICT,
     )
 
@@ -98,44 +111,73 @@ def _normalize_page_candidate(raw: str) -> str | None:
         left, right = parts[0], re.sub(r"\D", "", parts[1])
         if not right:
             return None
+
+        # Heuristic cleanup for noisy sheet numbers like A83.2 -> A3.2.
+        # We assume sheet indices are typically 1–9; if the numeric part
+        # before the dot is > 9, progressively drop leading digits until
+        # it falls into that range.
+        m = re.match(r"^([A-Z]+)(\d+)$", left)
+        if m:
+            prefix, num_part = m.group(1), m.group(2)
+            if num_part.isdigit():
+                try:
+                    n = int(num_part)
+                    while len(num_part) > 1 and n > 9:
+                        num_part = num_part[1:]
+                        n = int(num_part)
+                    left = prefix + num_part
+                except ValueError:
+                    pass
+
         return f"{left}.{right}"
     return None
 
 
-def _extract_page_and_circle(texts: list[str]) -> tuple[str, str]:
+def _extract_page_and_circle(
+    page_texts: list[str] | None, circle_texts: list[str] | None
+) -> tuple[str, str]:
+    """
+    Given two sets of OCR tokens from a circle:
+    - page_texts: tokens from the *bottom* half of the circle (page number like A5.1)
+    - circle_texts: tokens from the *top* half of the circle (detail number like 1, 2, 3)
+    return (page_number, circle_text).
+    """
     page_number = ""
     circle_text = ""
-    if not texts:
-        return page_number, circle_text
 
-    joined = " ".join(texts)
+    page_texts = page_texts or []
+    circle_texts = circle_texts or []
 
-    # 1) try flexible A9.1 pattern in the whole string
-    m = re.search(r"[A-Za-z]\s*\d+\s*[\.\-]?\s*\d*", joined)
-    if m:
-        cand = _normalize_page_candidate(m.group(0))
-        if cand:
-            page_number = cand
+    # ---- Derive page_number from BOTTOM tokens ----
+    if page_texts:
+        joined = " ".join(page_texts)
 
-    # 2) fallback over individual tokens
-    if not page_number:
-        for t in texts:
-            cand = _normalize_page_candidate(t)
+        # 1) try flexible A9.1 pattern in the whole string
+        m = re.search(r"[A-Za-z]\s*\d+\s*[\.\-]?\s*\d*", joined)
+        if m:
+            cand = _normalize_page_candidate(m.group(0))
             if cand:
                 page_number = cand
-                break
 
-    # 3) last-resort: pure decimal like 9.1 -> A9.1
-    if not page_number:
-        for t in texts:
-            t_clean = t.strip()
-            dec = re.fullmatch(r"\d+\.\d+", t_clean)
-            if dec:
-                page_number = f"A{dec.group(0)}"
-                break
+        # 2) fallback over individual tokens
+        if not page_number:
+            for t in page_texts:
+                cand = _normalize_page_candidate(t)
+                if cand:
+                    page_number = cand
+                    break
 
-    # circle text: first pure integer 1–4 digits
-    for t in texts:
+        # 3) last-resort: pure decimal like 9.1 -> A9.1
+        if not page_number:
+            for t in page_texts:
+                t_clean = t.strip()
+                dec = re.fullmatch(r"\d+\.\d+", t_clean)
+                if dec:
+                    page_number = f"A{dec.group(0)}"
+                    break
+
+    # ---- Derive circle_text from TOP tokens ----
+    for t in circle_texts:
         t_clean = t.strip()
         if re.fullmatch(r"\d{1,4}", t_clean):
             circle_text = t_clean
@@ -181,27 +223,112 @@ def detect_circles_with_text_from_image(img):
                 right = min(x + r + 20, img.shape[1])
                 crop = img[top:bottom, left:right]
 
-                texts = []
+                # Basic preprocessing + upscaling to help OCR read small text
                 try:
-                    data = _tess_image_to_data(crop, psm="7")
-                    for idx in range(len(data["text"])):
-                        t_raw = data["text"][idx] or ""
-                        t = t_raw.strip()
-                        if not t:
-                            continue
-                        conf_str = data["conf"][idx]
+                    gray_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+                    gray_crop = cv2.medianBlur(gray_crop, 3)
+                    crop_for_ocr = cv2.cvtColor(gray_crop, cv2.COLOR_GRAY2BGR)
+                except Exception:
+                    crop_for_ocr = crop
+
+                try:
+                    h_c, w_c = crop_for_ocr.shape[:2]
+                    if h_c > 0 and w_c > 0:
+                        scale = 3.0
+                        crop_for_ocr = cv2.resize(
+                            crop_for_ocr,
+                            None,
+                            fx=scale,
+                            fy=scale,
+                            interpolation=cv2.INTER_CUBIC,
+                        )
+                except Exception:
+                    # If resize fails, fall back to original crop_for_ocr
+                    pass
+
+                top_texts: list[str] = []
+                bottom_texts: list[str] = []
+
+                try:
+                    h_crop = crop_for_ocr.shape[0]
+                    mid_y = h_crop / 2.0
+
+                    if _EASYOCR_READER is not None:
+                        # EasyOCR path: better for tiny, cluttered callout text
                         try:
-                            conf = float(conf_str)
-                        except (ValueError, TypeError):
-                            conf = -1.0
-                        if conf < 0:
-                            continue
-                        texts.append(t)
+                            crop_rgb = cv2.cvtColor(
+                                crop_for_ocr, cv2.COLOR_BGR2RGB
+                            )
+                        except Exception:
+                            crop_rgb = crop_for_ocr
+
+                        ocr_results = _EASYOCR_READER.readtext(
+                            crop_rgb, detail=1
+                        )
+                        for bbox, text, conf in ocr_results:
+                            if not text:
+                                continue
+                            if conf is not None and conf < EASYOCR_MIN_CONFIDENCE:
+                                continue
+
+                            t = text.strip()
+                            if not t:
+                                continue
+
+                            try:
+                                ys = [pt[1] for pt in bbox]
+                                center_y = sum(ys) / len(ys)
+                            except Exception:
+                                bottom_texts.append(t)
+                                continue
+
+                            if center_y < mid_y:
+                                top_texts.append(t)
+                            else:
+                                bottom_texts.append(t)
+                    else:
+                        # Fallback: Tesseract for circle OCR (previous behavior)
+                        data = _tess_image_to_data(
+                            crop_for_ocr,
+                            psm="6",
+                            extra_config="-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-",
+                        )
+
+                        n = len(data["text"])
+                        for idx in range(n):
+                            t_raw = data["text"][idx] or ""
+                            t = t_raw.strip()
+                            if not t:
+                                continue
+
+                            conf_str = data["conf"][idx]
+                            try:
+                                conf = float(conf_str)
+                            except (ValueError, TypeError):
+                                conf = -1.0
+                            if conf < 0:
+                                continue
+
+                            try:
+                                top_val = int(data["top"][idx])
+                                height_val = int(data["height"][idx])
+                            except (ValueError, TypeError, KeyError):
+                                # If geometry is missing, just treat as generic text
+                                bottom_texts.append(t)
+                                continue
+
+                            center_y = top_val + height_val / 2.0
+                            if center_y < mid_y:
+                                top_texts.append(t)
+                            else:
+                                bottom_texts.append(t)
                 except Exception as e:
                     print(f"OCR error for circle {i}: {e}")
-                    texts = []
+                    top_texts, bottom_texts = [], []
 
-                page_number, circle_text = _extract_page_and_circle(texts)
+                page_number, circle_text = _extract_page_and_circle(
+                    page_texts=bottom_texts, circle_texts=top_texts
+                )
 
                 results.append(
                     {
@@ -211,7 +338,9 @@ def detect_circles_with_text_from_image(img):
                         "r": int(r),
                         "page_number": page_number,
                         "circle_text": circle_text,
-                        "raw_texts": texts,
+                        # Debug fields to understand what OCR saw
+                        "raw_texts_top": top_texts,
+                        "raw_texts_bottom": bottom_texts,
                     }
                 )
 

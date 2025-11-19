@@ -13,7 +13,17 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, setSelectedShape }
   const handleShapeClick = (e, shape) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log("Shape clicked:", shape); 
+    // Extra debug logging for OCR results when clicking a circle
+    if (shape.r) {
+      console.log("Circle clicked. OCR debug:", {
+        page_number: shape.page_number,
+        circle_text: shape.circle_text,
+        raw_texts_top: shape.raw_texts_top,
+        raw_texts_bottom: shape.raw_texts_bottom,
+      });
+    } else {
+      console.log("Text box clicked:", shape);
+    }
     setSelectedShape(shape);
   };
 
