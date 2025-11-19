@@ -9,7 +9,7 @@
 
 import React from "react";
 
-function ShapeOverlay({ imageInfo, circles, texts, setSelectedShape }) {
+function ShapeOverlay({ imageInfo, circles, texts, selection, setSelectedShape }) {
   const handleShapeClick = (e, shape) => {
     e.preventDefault();
     e.stopPropagation();
@@ -60,6 +60,20 @@ function ShapeOverlay({ imageInfo, circles, texts, setSelectedShape }) {
           style={{ cursor: "pointer", pointerEvents: "all" }}
         />
       ))}
+
+      {selection && (
+        <rect
+          x={selection.x1}
+          y={selection.y1}
+          width={selection.x2 - selection.x1}
+          height={selection.y2 - selection.y1}
+          fill="rgba(0, 120, 255, 0.12)"
+          stroke="#0078ff"
+          strokeWidth="2"
+          strokeDasharray="6 4"
+          pointerEvents="none"
+        />
+      )}
     </svg>
   );
 }

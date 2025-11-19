@@ -15,9 +15,10 @@ function Popup({ selectedShape, onClose, zoom = 1 }) {
   const [info, setInfo] = useState(null);
 
   useEffect(() => {
+    // Only fetch explanation + images when a TEXT selection is active
     if (!selectedShape || selectedShape.r) return;
     setInfo("Loading...");
-    fetch("http://localhost:8001/llm/generate_info_structured/", {
+    fetch("http://localhost:8001/llm-images/explain_with_images", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: selectedShape.text || "Unlabeled text" }),
@@ -28,7 +29,7 @@ function Popup({ selectedShape, onClose, zoom = 1 }) {
       })
       .then((data) => setInfo(data))
       .catch((error) => {
-        console.error("LLM fetch error:", error);
+        console.error("LLM+image fetch error:", error);
         setInfo("Error generating info");
       });
   }, [selectedShape]);
@@ -75,13 +76,16 @@ function Popup({ selectedShape, onClose, zoom = 1 }) {
         left: `${left}px`,
         top: `${top}px`,
         zIndex: 1001,
-        backgroundColor: "orange",
-        border: "1px solid #ccc",
+        // Glassy / frosted card
+        backgroundColor: "rgba(255, 255, 255, 0.7)",
+        border: "1px solid rgba(255, 255, 255, 0.4)",
         borderRadius: "8px",
         padding: "10px",
-        boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-        minWidth: "200px",
-        transform: "scale(1)", 
+        boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
+        minWidth: "320px",
+        maxWidth: "420px",
+        backdropFilter: "blur(8px)",
+        color: "#000",
       }}
     >
       {selectedShape.r ? (
@@ -184,6 +188,58 @@ function Popup({ selectedShape, onClose, zoom = 1 }) {
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {Array.isArray(info.images) && info.images.length > 0 && (
+                <div style={{ marginBottom: "8px" }}>
+                  <strong>Related images:</strong>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      marginTop: "6px",
+                      flexWrap: "nowrap",
+                      overflowX: "auto",
+                    }}
+                  >
+                    {info.images.map((img, idx) => (
+                      <a
+                        key={idx}
+                        href={img.page_url || img.image_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ textDecoration: "none", color: "inherit" }}
+                      >
+                        <figure
+                          style={{
+                            margin: 0,
+                            textAlign: "center",
+                            maxWidth: "120px",
+                          }}
+                        >
+                          <img
+                            src={img.thumbnail_url || img.image_url}
+                            alt={img.title || "Related construction image"}
+                            style={{
+                              maxWidth: "120px",
+                              maxHeight: "120px",
+                              borderRadius: "4px",
+                              objectFit: "cover",
+                              border: "1px solid #ddd",
+                            }}
+                          />
+                          <figcaption
+                            style={{ fontSize: "0.75rem", marginTop: "4px" }}
+                          >
+                            {img.title
+                              ? img.title.slice(0, 50)
+                              : img.source}
+                          </figcaption>
+                        </figure>
+                      </a>
+                    ))}
+                  </div>
                 </div>
               )}
 

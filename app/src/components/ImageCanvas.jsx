@@ -37,6 +37,9 @@ function ImageCanvas({
   const wrapperRef = useRef(null);
   const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
   const [isDetecting, setIsDetecting] = useState(false);
+  const [selection, setSelection] = useState(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionStart, setSelectionStart] = useState(null);
 
   const handleImageLoad = async () => {
     if (!imgRef.current) return;
@@ -105,6 +108,125 @@ function ImageCanvas({
     }
   };
 
+  const runRegionDetection = async () => {
+    try {
+      setError(null);
+      if (!imageUrl || !imageInfo) {
+        throw new Error("Image not ready. Please wait for it to load.");
+      }
+      if (!selection) {
+        throw new Error("No region selected. Drag on the image to select an area.");
+      }
+
+      const { x1, y1, x2, y2 } = selection;
+      const widthClient = x2 - x1;
+      const heightClient = y2 - y1;
+      if (widthClient <= 0 || heightClient <= 0) {
+        throw new Error("Selected region is too small.");
+      }
+
+      const x = Math.round(x1 / imageInfo.scaleX);
+      const y = Math.round(y1 / imageInfo.scaleY);
+      const w = Math.round(widthClient / imageInfo.scaleX);
+      const h = Math.round(heightClient / imageInfo.scaleY);
+
+      setIsDetecting(true);
+
+      const blob = await fetch(imageUrl).then((r) => r.blob());
+      const formData = new FormData();
+      formData.append("file", blob, "image.png");
+      formData.append("x", String(x));
+      formData.append("y", String(y));
+      formData.append("w", String(w));
+      formData.append("h", String(h));
+
+      const res = await fetch("http://localhost:8001/detect/region-detect", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+
+      const data = await res.json();
+      const rawCircles = data.circles || [];
+      const rawTexts = data.detections || [];
+
+      setRawCircles(rawCircles);
+      setRawTexts(rawTexts);
+
+      const scaledCircles = rawCircles.map((c) => ({
+        ...c,
+        x: c.x * imageInfo.scaleX,
+        y: c.y * imageInfo.scaleY,
+        r: c.r * Math.min(imageInfo.scaleX, imageInfo.scaleY),
+      }));
+
+      const scaledTexts = rawTexts.map((t) => ({
+        ...t,
+        x1: t.x1 * imageInfo.scaleX,
+        y1: t.y1 * imageInfo.scaleY,
+        x2: t.x2 * imageInfo.scaleX,
+        y2: t.y2 * imageInfo.scaleY,
+      }));
+
+      setCircles(scaledCircles);
+      setTexts(scaledTexts);
+    } catch (err) {
+      setError(`Failed to detect in region: ${err.message}`);
+      console.error(err);
+    } finally {
+      setIsDetecting(false);
+    }
+  };
+
+  const clientToImageCoords = (event) => {
+    if (!wrapperRef.current) return null;
+    const rect = wrapperRef.current.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / zoom;
+    const y = (event.clientY - rect.top) / zoom;
+    return { x, y };
+  };
+
+  const handleMouseDown = (event) => {
+    if (!imageInfo) return;
+    if (event.button !== 0) return; // left button only
+
+    const coords = clientToImageCoords(event);
+    if (!coords) return;
+
+    const { x, y } = coords;
+    const clampedX = Math.max(0, Math.min(x, imageInfo.clientWidth));
+    const clampedY = Math.max(0, Math.min(y, imageInfo.clientHeight));
+
+    setSelectionStart({ x: clampedX, y: clampedY });
+    setSelection({ x1: clampedX, y1: clampedY, x2: clampedX, y2: clampedY });
+    setIsSelecting(true);
+  };
+
+  const handleMouseMove = (event) => {
+    if (!isSelecting || !selectionStart || !imageInfo) return;
+
+    const coords = clientToImageCoords(event);
+    if (!coords) return;
+
+    const { x, y } = coords;
+    const clampedX = Math.max(0, Math.min(x, imageInfo.clientWidth));
+    const clampedY = Math.max(0, Math.min(y, imageInfo.clientHeight));
+
+    const x1 = Math.min(selectionStart.x, clampedX);
+    const y1 = Math.min(selectionStart.y, clampedY);
+    const x2 = Math.max(selectionStart.x, clampedX);
+    const y2 = Math.max(selectionStart.y, clampedY);
+
+    setSelection({ x1, y1, x2, y2 });
+  };
+
+  const stopSelecting = () => {
+    if (isSelecting) {
+      setIsSelecting(false);
+    }
+  };
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <ZoomControls zoom={zoom} zoomIn={zoomIn} zoomOut={zoomOut} />
@@ -117,6 +239,15 @@ function ImageCanvas({
           aria-busy={isDetecting ? "true" : "false"}
         >
           {isDetecting ? "Detecting..." : "Detect"}
+        </button>
+        <button
+          onClick={runRegionDetection}
+          disabled={!imageInfo || !selection || isDetecting}
+          className="detect-button"
+          style={{ marginLeft: "8px" }}
+          aria-busy={isDetecting ? "true" : "false"}
+        >
+          {isDetecting ? "Detecting..." : "Detect in selection"}
         </button>
       </div>
 
@@ -142,6 +273,10 @@ function ImageCanvas({
             transformOrigin: "0 0",
             transition: "transform 120ms ease-out",
           }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={stopSelecting}
+          onMouseLeave={stopSelecting}
         >
           <img
             ref={imgRef}
@@ -156,19 +291,25 @@ function ImageCanvas({
             }}
           />
           {loaded && imageInfo && (
-            <ShapeOverlay
-              imageInfo={imageInfo}
-              circles={circles}
-              texts={texts}
-              setSelectedShape={setSelectedShape}
-            />
+            <>
+              <ShapeOverlay
+                imageInfo={imageInfo}
+                circles={circles}
+                texts={texts}
+                selection={selection}
+                setSelectedShape={setSelectedShape}
+              />
+              {selectedShape && (
+                <Popup
+                  selectedShape={selectedShape}
+                  onClose={() => setSelectedShape(null)}
+                  zoom={zoom}
+                />
+              )}
+            </>
           )}
         </div>
       </div>
-
-      {selectedShape && imageInfo && (
-        <Popup selectedShape={selectedShape} onClose={() => setSelectedShape(null)} zoom={zoom} />
-      )}
     </div>
   );
 }

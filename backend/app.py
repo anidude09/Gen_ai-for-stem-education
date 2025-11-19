@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
-from routes import detect, llm,auth, regions_detect
+from routes import detect, llm,auth, regions_detect, llm_images
 
 app = FastAPI()
 
@@ -18,6 +18,7 @@ app.include_router(detect.router, prefix="/detect", tags=["Detection"])
 app.include_router(llm.router, prefix="/llm", tags=["LLM"])
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(regions_detect.router, prefix="/detect", tags=["Region Detection"])
+app.include_router(llm_images.router, prefix="/llm-images", tags=["LLM Images"])
 
 @app.get("/healthz")
 def healthz():

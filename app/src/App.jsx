@@ -32,71 +32,84 @@ function MainPage() {
 
   return (
     <div className="container">
-      <h1 className="heading">Generative AI for Stem Education</h1>
+      <header className="app-header">
+        <h1 className="heading">Generative AI for STEM Education</h1>
+        {user && (
+          <button onClick={handleLogout} className="logout-button">
+            Logout
+          </button>
+        )}
+      </header>
 
-      {!user ? (
-        <LoginForm setUser={setUser} setSessionId={setSessionId} />
-      ) : (
-        <>
-          <ImageUploader
-            setImageUrl={setImageUrl}
-            resetStates={() => {
-              setLoaded(false);
-              setError(null);
-              setRawCircles([]);
-              setRawTexts([]);
-              setCircles([]);
-              setTexts([]);
-              setSelectedShape(null);
-            }}
-          />
+      <div className="app-body">
+        <aside className="sidebar">
+          <h2 className="sidebar-title">Workspace</h2>
+          <p className="sidebar-subtitle">
+            placeholder
+          </p>
+        </aside>
 
-          {error && <div className="error">{error}</div>}
-
-          {imageUrl && (
-            <ImageCanvas
-              imageUrl={imageUrl}
-              imgRef={imgRef}
-              setLoaded={setLoaded}
-              setError={setError}
-              setImageInfo={setImageInfo}
-              setCircles={setCircles}
-              setTexts={setTexts}
-              setRawCircles={setRawCircles}
-              setRawTexts={setRawTexts}
-              loaded={loaded}
-              imageInfo={imageInfo}
-              circles={circles}
-              texts={texts}
-              setSelectedShape={setSelectedShape}
-              selectedShape={selectedShape}
-              sessionId={sessionId}
-            />
-          )}
-
-          {selectedShape && (
+        <main className="main-content">
+          {!user ? (
+            <LoginForm setUser={setUser} setSessionId={setSessionId} />
+          ) : (
             <>
-              <div
-                style={{
-                  position: "fixed",
-                  top: 0,
-                  left: 0,
-                  width: "100%",
-                  height: "100%",
-                  zIndex: 999,
-                }}
-                onClick={() => setSelectedShape(null)}
-              />
+              <div className="uploader-row">
+                <ImageUploader
+                  setImageUrl={setImageUrl}
+                  resetStates={() => {
+                    setLoaded(false);
+                    setError(null);
+                    setRawCircles([]);
+                    setRawTexts([]);
+                    setCircles([]);
+                    setTexts([]);
+                    setSelectedShape(null);
+                  }}
+                />
+                {error && <div className="error">{error}</div>}
+              </div>
+
+              {imageUrl && (
+                <div className="image-area">
+                  <ImageCanvas
+                    imageUrl={imageUrl}
+                    imgRef={imgRef}
+                    setLoaded={setLoaded}
+                    setError={setError}
+                    setImageInfo={setImageInfo}
+                    setCircles={setCircles}
+                    setTexts={setTexts}
+                    setRawCircles={setRawCircles}
+                    setRawTexts={setRawTexts}
+                    loaded={loaded}
+                    imageInfo={imageInfo}
+                    circles={circles}
+                    texts={texts}
+                    setSelectedShape={setSelectedShape}
+                    selectedShape={selectedShape}
+                    sessionId={sessionId}
+                  />
+                </div>
+              )}
+
+              {selectedShape && (
+                <div
+                  style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    zIndex: 999,
+                  }}
+                  onClick={() => setSelectedShape(null)}
+                />
+              )}
             </>
           )}
-        </>
-      )}
-
-      {user && (
-        <button onClick={handleLogout} className="logout-button">
-          Logout
-        </button>
-      )}
+        </main>
+      </div>
     </div>
   );
 }
