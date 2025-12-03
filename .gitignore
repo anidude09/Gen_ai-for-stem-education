@@ -45,3 +45,7 @@ dist-ssr
 *.xml
 *.iml
 .venv
+
+# Local documentation / diagrams (not for git)
+docs/system-diagram.mmd
+docs/system_prompts.txt
