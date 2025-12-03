@@ -9,7 +9,7 @@
 
 import React from "react";
 
-function ShapeOverlay({ imageInfo, circles, texts, selection, setSelectedShape }) {
+function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick }) {
   const handleShapeClick = (e, shape) => {
     e.preventDefault();
     e.stopPropagation();
@@ -24,7 +24,9 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, setSelectedShape }
     } else {
       console.log("Text box clicked:", shape);
     }
-    setSelectedShape(shape);
+    if (onShapeClick) {
+      onShapeClick(shape);
+    }
   };
 
   return (

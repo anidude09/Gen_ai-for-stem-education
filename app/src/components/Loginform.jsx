@@ -10,6 +10,7 @@
 
 import { useState } from "react";
 import "../styles/LoginForm.css";
+import { logActivity } from "../utils/activityLogger";
 
 function LoginForm({ setUser, setSessionId }) {
   const [name, setName] = useState("");
@@ -34,6 +35,14 @@ function LoginForm({ setUser, setSessionId }) {
       if (response.ok && data.session_id) {
         setUser({ name, email });
         setSessionId(data.session_id);
+
+        // Log a successful login associated with the newly created session
+        logActivity({
+          sessionId: data.session_id,
+          eventType: "login_success",
+          eventData: { name, email },
+          user: { name, email },
+        });
       } else {
         setError(data.message || "Login failed. Please try again.");
       }

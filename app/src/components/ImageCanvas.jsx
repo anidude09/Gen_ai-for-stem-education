@@ -16,6 +16,7 @@ import ShapeOverlay from "./ShapeOverlay";
 import Popup from "./Popup";
 import ZoomControls from "./ZoomControls";
 import useZoom from "../hooks/useZoom";
+import { logActivity } from "../utils/activityLogger";
 
 function ImageCanvas({
   imageUrl,
@@ -33,6 +34,7 @@ function ImageCanvas({
   texts,
   setSelectedShape,
   selectedShape,
+  sessionId,
   onNavigateToPage,
 }) {
   const wrapperRef = useRef(null);
@@ -69,6 +71,13 @@ function ImageCanvas({
       const formData = new FormData();
       formData.append("file", blob, "image.png");
 
+      // Log the user explicitly starting a full-image detection
+      logActivity({
+        sessionId,
+        eventType: "detect_full_image_start",
+        eventData: { imageUrl },
+      });
+
       const res = await fetch("http://localhost:8001/detect/", {
         method: "POST",
         body: formData,
@@ -100,6 +109,16 @@ function ImageCanvas({
 
       setCircles(scaledCircles);
       setTexts(scaledTexts);
+
+      logActivity({
+        sessionId,
+        eventType: "detect_full_image_complete",
+        eventData: {
+          imageUrl,
+          circlesCount: rawCircles.length,
+          textsCount: rawTexts.length,
+        },
+      });
     } catch (err) {
       setError(`Failed to detect shapes: ${err.message}`);
       console.error(err);
@@ -132,6 +151,16 @@ function ImageCanvas({
       const h = Math.round(heightClient / imageInfo.scaleY);
 
       setIsDetecting(true);
+
+      logActivity({
+        sessionId,
+        eventType: "detect_region_start",
+        eventData: {
+          imageUrl,
+          selectionClient: { x1, y1, x2, y2 },
+          selectionImage: { x, y, w, h },
+        },
+      });
 
       const blob = await fetch(imageUrl).then((r) => r.blob());
       const formData = new FormData();
@@ -172,6 +201,17 @@ function ImageCanvas({
 
       setCircles(scaledCircles);
       setTexts(scaledTexts);
+
+      logActivity({
+        sessionId,
+        eventType: "detect_region_complete",
+        eventData: {
+          imageUrl,
+          selectionClient: { x1, y1, x2, y2 },
+          regionCirclesCount: rawCircles.length,
+          regionTextsCount: rawTexts.length,
+        },
+      });
     } catch (err) {
       setError(`Failed to detect in region: ${err.message}`);
       console.error(err);
@@ -226,6 +266,21 @@ function ImageCanvas({
     if (isSelecting) {
       setIsSelecting(false);
     }
+  };
+
+  const handleShapeSelected = (shape) => {
+    setSelectedShape(shape);
+
+    const isCircle = Boolean(shape.r);
+
+    logActivity({
+      sessionId,
+      eventType: isCircle ? "circle_selected" : "text_selected",
+      eventData: {
+        shape,
+        imageUrl,
+      },
+    });
   };
 
   return (
@@ -298,7 +353,7 @@ function ImageCanvas({
                 circles={circles}
                 texts={texts}
                 selection={selection}
-                setSelectedShape={setSelectedShape}
+                onShapeClick={handleShapeSelected}
               />
               {selectedShape && (
                 <Popup
@@ -306,6 +361,7 @@ function ImageCanvas({
                   onClose={() => setSelectedShape(null)}
                   zoom={zoom}
                   onNavigateToPage={onNavigateToPage}
+                  sessionId={sessionId}
                 />
               )}
             </>

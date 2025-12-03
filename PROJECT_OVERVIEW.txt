@@ -1,0 +1,104 @@
+PROJECT OVERVIEW: Gen_ai-for-stem-education
+=======================================================
+
+1. INTRODUCTION
+----------------
+This project is an AI-powered educational tool designed to assist students (specifically in civil engineering/construction management) in understanding technical documents and construction drawings. 
+
+The application allows users to view construction plans, detects text and technical terms within those plans using Optical Character Recognition (OCR), and provides detailed, context-aware explanations using a Large Language Model (LLM). It acts as a "Senior Construction Engineer" mentor for the user.
+
+2. TECHNICAL ARCHITECTURE
+-------------------------
+The system follows a modern client-server architecture:
+
+A. Frontend (User Interface)
+   - Framework: React (built with Vite)
+   - Location: `app/` directory
+   - Key Features: 
+     - Image viewer with zoom/pan controls.
+     - Login/Authentication screens.
+     - Interactive overlays for detected text/objects.
+
+B. Backend (API Server)
+   - Framework: FastAPI (Python)
+   - Location: `backend/` directory
+   - Entry Point: `backend/app.py`
+   - Key Responsibilities:
+     - Handling API requests from the frontend.
+     - Managing user sessions (Authentication).
+     - Running OCR algorithms on images.
+     - Interfacing with external AI services.
+
+C. Database
+   - Type: SQLite
+   - File: `backend/sessions.db`
+   - Purpose: Lightweight storage for user sessions and authentication.
+
+D. AI & Machine Learning Services
+   - Text Detection (OCR): Uses Tesseract (pytesseract) and EasyOCR to read text from images.
+   - LLM (Language Model): Uses Groq API to generate explanations for technical terms.
+   - Image Search: Connects to Google Search to find reference images for terms.
+   - System Persona: Defined in `docs/system_prompts.txt` (Senior Construction Engineer).
+
+3. PROJECT STRUCTURE
+--------------------
+Root Directory:
+|-- app/                    # Frontend React Application
+|   |-- src/                # Source code (Components, Hooks, Styles)
+|   |-- public/             # Static assets
+|   |-- package.json        # Frontend dependencies
+|
+|-- backend/                # Backend FastAPI Application
+|   |-- app.py              # Main server entry point
+|   |-- routes/             # API Endpoints (Controllers)
+|   |   |-- auth.py         # Login/Logout logic
+|   |   |-- detect.py       # General object/text detection
+|   |   |-- regions_detect.py # Identifying specific regions in drawings
+|   |   |-- llm.py          # Text explanation logic
+|   |   |-- llm_images.py   # Fetching related images
+|   |-- services/           # Helper logic (e.g., Google Image search)
+|   |-- requirements.txt    # Python dependencies
+|
+|-- docs/                   # Documentation
+|   |-- system_prompts.txt  # The "brain" of the AI (Prompt Engineering)
+|   |-- system-diagram.mmd  # Architecture diagram (Mermaid format)
+
+4. KEY WORKFLOWS
+----------------
+1. Authentication:
+   - User logs in via the React frontend.
+   - Request goes to `backend/routes/auth.py`.
+   - Session is stored in `sessions.db`.
+
+2. Image Analysis & Explanation:
+   - User uploads or views a construction drawing.
+   - Backend (`detect.py`) processes the image using OCR to find text labels (e.g., "CORRIDOR", "BEAM").
+   - Frontend displays clickable boxes around detected text.
+   - User clicks a term.
+   - Backend (`llm.py`) sends the term + context to the Groq LLM.
+   - LLM uses the prompt from `docs/system_prompts.txt` to explain the term in simple language.
+   - Simultaneously, `llm_images.py` fetches visual examples from Google.
+   - User sees the definition and reference images.
+
+5. NON-TECHNICAL SUMMARY (For New Team Members)
+-----------------------------------------------
+Imagine a digital magnifying glass for blueprints. When a student looks at a complex construction drawing and sees a confusing term like "HVAC Return," they can click on it. The system instantly tells them:
+1. What it is (in simple English).
+2. Why it matters in construction.
+3. Shows them pictures of what it looks like in real life.
+
+It bridges the gap between abstract technical drawings and real-world understanding.
+
+6. GETTING STARTED (Developer Notes)
+------------------------------------
+- Python Environment: Ensure you have the dependencies in `backend/requirements.txt` installed.
+  - Key libs: `fastapi`, `uvicorn`, `opencv-python`, `pytesseract`, `groq`.
+- Frontend Environment: Node.js is required. Run `npm install` in the `app/` folder.
+- Running the App:
+  1. Backend: `uvicorn app:app --reload` (from `backend/` folder).
+  2. Frontend: `npm run dev` (from `app/` folder).
+- Configuration: Check for `.env` files for API keys (Groq, Google) - *Note: do not share these publically*.
+
+-------------------------------------------------------
+Last Updated: December 3, 2025
+

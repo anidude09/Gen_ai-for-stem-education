@@ -10,14 +10,36 @@
 
 
 import { useState, useEffect } from "react";
+import { logActivity } from "../utils/activityLogger";
 
-function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage }) {
+function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }) {
   const [info, setInfo] = useState(null);
+
+  // Log whenever a popup is opened for a selected shape
+  useEffect(() => {
+    if (!selectedShape || !sessionId) return;
+
+    const isCircle = Boolean(selectedShape.r);
+    logActivity({
+      sessionId,
+      eventType: isCircle ? "circle_popup_opened" : "text_popup_opened",
+      eventData: selectedShape,
+    });
+  }, [selectedShape, sessionId]);
 
   useEffect(() => {
     // Only fetch explanation + images when a TEXT selection is active
     if (!selectedShape || selectedShape.r) return;
     setInfo("Loading...");
+
+    if (sessionId) {
+      logActivity({
+        sessionId,
+        eventType: "text_explanation_requested",
+        eventData: { text: selectedShape.text || "Unlabeled text" },
+      });
+    }
+
     fetch("http://localhost:8001/llm-images/explain_with_images", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -32,7 +54,7 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage }) {
         console.error("LLM+image fetch error:", error);
         setInfo("Error generating info");
       });
-  }, [selectedShape]);
+  }, [selectedShape, sessionId]);
 
   if (!selectedShape) return null;
 
@@ -64,6 +86,18 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage }) {
     }
 
     const pageImageUrl = `/images/${pageNumber}.png`;
+
+    if (sessionId) {
+      logActivity({
+        sessionId,
+        eventType: "navigate_to_page",
+        eventData: {
+          pageNumber,
+          circleText,
+          pageImageUrl,
+        },
+      });
+    }
 
     if (onNavigateToPage) {
       // Let the parent (MainPage) handle switching tabs / images.

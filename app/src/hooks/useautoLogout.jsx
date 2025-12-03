@@ -9,6 +9,7 @@
  */
 
 import { useEffect } from "react";
+import { logActivity } from "../utils/activityLogger";
 
 export default function useAutoLogout(sessionId, handleLogout, timeout) {
   useEffect(() => {
@@ -20,6 +21,10 @@ export default function useAutoLogout(sessionId, handleLogout, timeout) {
       clearTimeout(timer);
       timer = setTimeout(() => {
         console.log("Auto logout: inactive for 5 mins");
+        logActivity({
+          sessionId,
+          eventType: "logout_auto_inactivity",
+        });
         handleLogout();
       }, timeout);
     };
