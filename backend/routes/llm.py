@@ -119,32 +119,46 @@ def generate_info_from_llm_structured(text: str) -> dict:
             {
                 "role": "system",
                 "content": (
-                    "You are a senior construction engineer and technical editor. "
-                    "Use only the provided text for project-specific facts. "
-                    "You may include general conventions typical in construction documents when the snippet is just a short label or title. "
-                    "Respond ONLY with a valid JSON object that matches the requested schema. "
-                    "Do not include any preface, explanation, or code fences."
-                )
+                    "You are an instructor of a Construction Plan Reading course. "
+                    "You need to help undergraduate freshman students in the Construction "
+                    "Management program, who have no prior construction background, "
+                    "understand construction plans by providing clear and easy-to-understand explanations.\n\n"
+                    "Instructions:\n"
+                    "1. Use only the detected text or symbols, and interpret them within "
+                    "the context of a Construction Project.\n"
+                    "2. You may include general conventions typical in construction "
+                    "documents when the snippet consists only of a short label or title.\n"
+                    "3. Respond ONLY with a valid JSON object that matches the requested schema.\n"
+                    "4. Do not include any preface, explanation, or code fences.\n"
+                    "5. All explanations must be provided strictly from the Building/Housing "
+                    "Construction perspective.\n\n"
+                    "Schema (JSON keys):\n"
+                    '- summary: 2–3 bullets (plain language, 60–120 words total)\n'
+                    '- key_terms: array of {\"term\": str, \"definition\": str} only if defined in snippet\n'
+                    '- unit_conversions: array of {\"original\": str, \"si\": str} where applicable\n'
+                    "- clarifying_question: one question if context is insufficient, else empty string\n\n"
+                    "Constraints:\n"
+                    '- Expand acronyms only if defined in the snippet; else note "not defined here".\n'
+                    '- If not construction-related, set summary to ["Out of scope for construction"] '
+                    "and provide a clarifying_question.\n"
+                    '- If the snippet is very short (e.g., a sheet title such as "FIRST FLOOR PLAN"), '
+                    "treat it as a drawing/section label and explain its typical role in "
+                    "construction documents without assumptions specific to a particular "
+                    "construction project.\n"
+                    "- Output ONLY the JSON object. No additional text."
+                ),
             },
             {
                 "role": "user",
                 "content": (
-                    "SNIPPET (between triple backticks):\n"
+                    "Detected construction-plan text or symbol:\n"
                     "```SNIPPET\n"
                     f"{text}\n"
                     "```\n\n"
-                    "Return STRICT JSON with keys:\n"
-                    "- summary: 2–3 bullets (plain language, 60–120 words total)\n"
-                    '- key_terms: array of {"term": str, "definition": str} only if defined in snippet\n'
-                    '- unit_conversions: array of {"original": str, "si": str} where applicable\n'
-                    "- clarifying_question: one question if context is insufficient, else empty string\n\n"
-                    "Constraints:\n"
-                    "- Expand acronyms only if defined in the snippet; else note 'not defined here'.\n"
-                    "- If not construction-related, set summary to ['Out of scope for construction'] and provide a clarifying_question.\n"
-                    "- If the snippet is very short (e.g., a sheet title like 'FIRST FLOOR PLAN'), treat it as a drawing/section label and explain its typical purpose in construction documents without project-specific assumptions.\n"
-                    "- Output ONLY the JSON object. No additional text."
-                )
-            }
+                    "Using the above snippet, generate the JSON object according to the "
+                    "schema and constraints in the system instructions."
+                ),
+            },
         ],
     )
 

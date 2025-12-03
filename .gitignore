@@ -49,3 +49,6 @@ dist-ssr
 # Local documentation / diagrams (not for git)
 docs/system-diagram.mmd
 docs/system_prompts.txt
+
+*.pdf
+*.csv
