@@ -84,3 +84,16 @@ timestamp_utc,session_id,user_name,user_email,event_type,event_data_json
 2025-12-03T05:28:51.167129,516f2b6b-f584-4d79-9dad-cb7cd77c732e,,,text_popup_opened,"{""id"": 29, ""x1"": 1161.0016666666668, ""y1"": 1174.7085127065686, ""x2"": 1339.5755555555556, ""y2"": 1187.0129148729343, ""text"": ""SECOND FLOOR PLAN""}"
 2025-12-03T05:28:51.171137,516f2b6b-f584-4d79-9dad-cb7cd77c732e,,,text_explanation_requested,"{""text"": ""SECOND FLOOR PLAN""}"
 2025-12-03T05:28:58.278407,516f2b6b-f584-4d79-9dad-cb7cd77c732e,,,logout_manual,{}
+2025-12-03T17:03:02.082962,69bc4558-f712-448f-80e7-b71a2cf48599,test ,test@gmail.com,login_success,"{""name"": ""test "", ""email"": ""test@gmail.com""}"
+2025-12-03T17:03:16.113460,69bc4558-f712-448f-80e7-b71a2cf48599,,,detect_full_image_start,"{""imageUrl"": ""blob:http://localhost:5173/c88be20e-eede-470b-a242-abfd7cda9dec""}"
+2025-12-03T17:04:15.207262,69bc4558-f712-448f-80e7-b71a2cf48599,,,detect_full_image_complete,"{""imageUrl"": ""blob:http://localhost:5173/c88be20e-eede-470b-a242-abfd7cda9dec"", ""circlesCount"": 47, ""textsCount"": 34}"
+2025-12-03T17:04:36.606070,69bc4558-f712-448f-80e7-b71a2cf48599,,,text_selected,"{""shape"": {""id"": 18, ""x1"": 580.1625925925927, ""y1"": 496.98972364949316, ""x2"": 614.4975925925927, ""y2"": 501.08540480488824, ""text"": ""OPEN SHELL""}, ""imageUrl"": ""blob:http://localhost:5173/c88be20e-eede-470b-a242-abfd7cda9dec""}"
+2025-12-03T17:04:36.608055,69bc4558-f712-448f-80e7-b71a2cf48599,,,text_popup_opened,"{""id"": 18, ""x1"": 580.1625925925927, ""y1"": 496.98972364949316, ""x2"": 614.4975925925927, ""y2"": 501.08540480488824, ""text"": ""OPEN SHELL""}"
+2025-12-03T17:04:36.611754,69bc4558-f712-448f-80e7-b71a2cf48599,,,text_explanation_requested,"{""text"": ""OPEN SHELL""}"
+2025-12-03T17:04:36.614732,69bc4558-f712-448f-80e7-b71a2cf48599,,,text_popup_opened,"{""id"": 18, ""x1"": 580.1625925925927, ""y1"": 496.98972364949316, ""x2"": 614.4975925925927, ""y2"": 501.08540480488824, ""text"": ""OPEN SHELL""}"
+2025-12-03T17:04:36.616742,69bc4558-f712-448f-80e7-b71a2cf48599,,,text_explanation_requested,"{""text"": ""OPEN SHELL""}"
+2025-12-03T17:19:45.709984,69bc4558-f712-448f-80e7-b71a2cf48599,,,logout_auto_inactivity,{}
+2025-12-03T17:19:45.727400,69bc4558-f712-448f-80e7-b71a2cf48599,,,logout_manual,{}
+2025-12-03T17:34:21.871839,1f02437f-137b-41af-ab34-136857e0bad6,ani,ani@gmailc.om,login_success,"{""name"": ""ani"", ""email"": ""ani@gmailc.om""}"
+2025-12-03T17:43:12.533652,1f02437f-137b-41af-ab34-136857e0bad6,,,logout_auto_inactivity,{}
+2025-12-03T17:43:12.549759,1f02437f-137b-41af-ab34-136857e0bad6,,,logout_manual,{}
