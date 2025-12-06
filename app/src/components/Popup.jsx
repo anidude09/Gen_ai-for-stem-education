@@ -58,6 +58,32 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
 
   if (!selectedShape) return null;
 
+  // Handle navigation from a circle popup to the corresponding detail page
+  const handleRedirect = (e, pageNumber, circleText) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!pageNumber || !onNavigateToPage) return;
+
+    // The backend serves static page images from /images (see backend/app.py).
+    // Example files: A3.1.png, A5.1.png, A8.1.png, etc.
+    const imagePath = `/images/${pageNumber}.png`;
+
+    if (sessionId) {
+      logActivity({
+        sessionId,
+        eventType: "circle_navigate_to_page",
+        eventData: {
+          page_number: pageNumber,
+          circle_text: circleText,
+        },
+      });
+    }
+
+    onNavigateToPage(imagePath, pageNumber, circleText);
+    onClose();
+  };
+
   // ✅ Coordinates logic updated:
   // Since the popup is inside a scaled container, we normally would NOT multiply by zoom.
   // However, we want the popup to stay visually close to the element, but NOT scale its text size.
@@ -73,6 +99,14 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
   const rawTop = selectedShape.r
     ? selectedShape.y - selectedShape.r / 2
     : selectedShape.y1;
+
+  // Determine the effective page number for navigation
+  // Prefer the explicit 'page_number' field (from bottom text).
+  // If missing, check if 'circle_text' looks like a page number (e.g., "A5.1").
+  let navPage = selectedShape.page_number;
+  if (!navPage && selectedShape.circle_text && /^[A-Z]\d+(\.\d+)?$/i.test(selectedShape.circle_text)) {
+      navPage = selectedShape.circle_text.toUpperCase();
+  }
 
   return (
     <div
@@ -104,16 +138,23 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
           <h4 style={{ marginTop: 0, marginBottom: "12px", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "8px" }}>
             Circle Information
           </h4>
-          {selectedShape.page_number ? (
-            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              <li style={{ marginBottom: "8px" }}>
-                <strong style={{ color: "#94a3b8" }}>Page:</strong> {selectedShape.page_number}
-              </li>
-              {selectedShape.circle_text && (
-                <li style={{ marginBottom: "12px" }}>
-                  <strong style={{ color: "#94a3b8" }}>Detail:</strong> {selectedShape.circle_text}
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {navPage ? (
+                <li style={{ marginBottom: "8px" }}>
+                  <strong style={{ color: "#94a3b8" }}>Page:</strong> {navPage}
                 </li>
-              )}
+            ) : (
+                <li style={{ marginBottom: "8px", color: "#cbd5e1" }}>
+                  No page reference detected.
+                </li>
+            )}
+            {selectedShape.circle_text && (
+              <li style={{ marginBottom: "12px" }}>
+                <strong style={{ color: "#94a3b8" }}>Detail:</strong> {selectedShape.circle_text}
+              </li>
+            )}
+            
+            {navPage && (
               <li>
                 <button
                   style={{
@@ -131,18 +172,16 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
                   onClick={(e) =>
                     handleRedirect(
                       e,
-                      selectedShape.page_number,
+                      navPage,
                       selectedShape.circle_text
                     )
                   }
                 >
-                  Go to Page {selectedShape.page_number}
+                  Go to Page {navPage}
                 </button>
               </li>
-            </ul>
-          ) : (
-            <p style={{ color: "#cbd5e1" }}>No page number available.</p>
-          )}
+            )}
+          </ul>
 
           {/* Debug info omitted for cleaner UI, or can be kept hidden */}
           

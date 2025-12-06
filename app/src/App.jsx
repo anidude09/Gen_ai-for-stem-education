@@ -6,6 +6,7 @@ import LoginForm from "./components/Loginform";
 import Page from "./components/Page";
 import useLogout from "./hooks/useLogout";
 import useautoLogout from "./hooks/useautoLogout";
+import useZoom from "./hooks/useZoom";
 import "./styles/App.css";
 
 function MainPage() {
@@ -47,6 +48,9 @@ function MainPage() {
 
   // Auto logout (inactivity + tab close)
   useautoLogout(sessionId, handleLogout,  50 * 10 * 1000);
+
+  // Zoom state - now managed at App level to put controls in header
+  const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
 
   // Handle navigation from a circle to a specific page (e.g., A5.1)
   const handleNavigateToPage = (pageImageUrl, pageNumber, circleText) => {
@@ -141,6 +145,17 @@ function MainPage() {
     <div className="container">
       <header className="app-header" style={{ justifyContent: "flex-start", gap: "20px" }}>
         <h1 className="heading" style={{ textAlign: "left", margin: 0 }}>Generative AI for STEM Education</h1>
+        
+        {user && imageUrl && (
+          <div className="zoom-controls-header">
+            <button onClick={zoomOut} title="Zoom out" className="zoom-btn-header">−</button>
+            <span style={{ fontSize: "14px", color: "#cbd5e1", width: "40px", textAlign: "center" }}>
+              {Math.round(zoom * 100)}%
+            </span>
+            <button onClick={zoomIn} title="Zoom in" className="zoom-btn-header">+</button>
+          </div>
+        )}
+
         {user && (
           <button onClick={handleLogout} className="logout-button" style={{ marginLeft: "auto", position: "static" }}>
             Logout
@@ -182,15 +197,11 @@ function MainPage() {
               )}
             </div>
           )}
-        </aside>
 
-        <main className="main-content">
-          {!user ? (
-            <LoginForm setUser={setUser} setSessionId={setSessionId} />
-          ) : (
-            <>
-              <div className="uploader-row">
-                <ImageUploader
+          {/* Upload Button - Moved to Sidebar */}
+          {user && (
+            <div style={{ marginTop: "12px" }}>
+               <ImageUploader
                   setImageUrl={setImageUrl}
                   resetStates={() => {
                     setLoaded(false);
@@ -200,24 +211,32 @@ function MainPage() {
                     setCircles([]);
                     setTexts([]);
                     setSelectedShape(null);
-                    setImageInfo(null); // Reset image info too
+                    setImageInfo(null);
                   }}
                 />
-                {error && <div className="error">{error}</div>}
-              </div>
+            </div>
+          )}
 
-              {/* Instructions Panel (Only shown when an image is loaded and we are in main view) */}
-              {activeView === "main" && imageUrl && (
-                <div className="instructions-panel">
-                    <h3>How to Use</h3>
-                    <ol>
-                        <li>Use the <strong>Detect</strong> button to find text and callouts automatically.</li>
-                        <li>Drag your mouse over a specific area and click <strong>Detect in selection</strong> for focused results.</li>
-                        <li>Click on highlighted text to get AI-powered explanations.</li>
-                        <li>Click on red callout circles to navigate to referenced detail pages.</li>
-                    </ol>
-                </div>
-              )}
+          {/* Instructions - Moved to sidebar bottom */}
+          {activeView === "main" && imageUrl && (
+            <div className="instructions-panel sidebar-instructions">
+                <h3>How to Use</h3>
+                <ol>
+                    <li><strong>Detect</strong> to find text/callouts.</li>
+                    <li><strong>Select region</strong> for focused search.</li>
+                    <li>Click text for AI explanations.</li>
+                    <li>Click red circles to navigate.</li>
+                </ol>
+            </div>
+          )}
+        </aside>
+
+        <main className="main-content">
+          {!user ? (
+            <LoginForm setUser={setUser} setSessionId={setSessionId} />
+          ) : (
+            <>
+              {error && <div className="error">{error}</div>}
 
               {/* Main sheet view */}
               {activeView === "main" && imageUrl && (
@@ -240,6 +259,8 @@ function MainPage() {
                     selectedShape={selectedShape}
                     sessionId={sessionId}
                     onNavigateToPage={handleNavigateToPage}
+                    zoom={zoom}
+                    handleWheel={handleWheel}
                   />
                 </div>
               )}
@@ -265,15 +286,12 @@ function MainPage() {
                     selectedShape={detailSelectedShape}
                     sessionId={sessionId}
                     onNavigateToPage={handleNavigateToPage}
+                    zoom={zoom}
+                    handleWheel={handleWheel}
                   />
                   {detailError && <div className="error">{detailError}</div>}
                 </div>
               )}
-
-              {/* Note: Previously we rendered full-screen invisible overlays here to */
-              /* close popups on outside click. Those overlays were intercepting */
-              /* clicks meant for the popup buttons (like "Go to page A7.1"). */
-              /* They've been removed so click handlers fire correctly. */}
             </>
           )}
         </main>

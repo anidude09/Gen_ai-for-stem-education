@@ -57,7 +57,7 @@ function LoginForm({ setUser, setSessionId }) {
   return (
     <div className="login-container">
       <div className="login-header">
-        <h2>Gen AI for STEM Education</h2>
+        <h2>Login to Main Space</h2>
         <p>Sign in to start your session</p>
       </div>
       <form onSubmit={handleSubmit} className="login-form">

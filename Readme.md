@@ -4,63 +4,107 @@ An AI-powered educational tool designed to assist students in understanding tech
 
 ## Prerequisites
 
-Before you begin, ensure you have the following installed:
+Before you begin, ensure you have the following installed on **each machine** (Windows or Mac):
 
-1.  **Python**: Version 3.10 or higher (tested with 3.10).
-    *   Check with: `python --version` or `python3 --version`
-2.  **Node.js**: Version 18 or higher (for building the frontend).
-    *   Check with: `node --version`
+1.  **Python**: Version 3.10 or higher (tested with 3.10).  
+    - Check with: `python --version` or `python3 --version`
+2.  **Node.js + npm**: Version 18 or higher (for building the frontend).  
+    - Check with: `node --version`
 3.  **Git**: For cloning the repository.
+
+> You do **not** need to copy a `.venv` or `node_modules` folder between machines.  
+> Each machine should create its own Python virtual environment and install packages from the shared config files.
 
 ## Installation & Setup
 
-### 1. Clone the Repository
+### 1. Clone the Repository (Windows + Mac)
+
 ```bash
 git clone <repository-url>
 cd Gen_ai-for-stem-education
 ```
 
-### 2. Backend Setup (Python)
-It is recommended to use a virtual environment to manage dependencies.
+### 2. Backend Setup (Python, using `backend/requirements.txt`)
+
+Create an isolated Python environment per machine and install the backend dependencies.
 
 **Windows (PowerShell):**
+
 ```powershell
-# Create virtual environment
+# From the project root
 python -m venv .venv
 
 # Activate virtual environment
 .\.venv\Scripts\Activate.ps1
 
-# Install dependencies
+# Upgrade pip (recommended)
+python -m pip install --upgrade pip
+
+# Install backend dependencies
 pip install -r backend/requirements.txt
 ```
 
 **Mac / Linux (Terminal):**
+
 ```bash
-# Create virtual environment
+# From the project root
 python3 -m venv .venv
 
 # Activate virtual environment
 source .venv/bin/activate
 
-# Install dependencies
+# Upgrade pip (recommended)
+python -m pip install --upgrade pip
+
+# Install backend dependencies
 pip install -r backend/requirements.txt
 ```
 
-> **Note for Mac Users:** If you encounter issues installing `opencv-python` or `easyocr`, you may need to install system dependencies using Homebrew (e.g., `brew install opencv`).
+> **Note for Mac Users:**  
+> If you encounter issues installing `opencv-python` or `easyocr`, you may need to install system dependencies using Homebrew, for example:  
+> `brew install opencv`
 
-### 3. Frontend Setup (React)
-You need to build the frontend so the backend can serve it.
+### 3. Frontend Setup (React, using `package-lock.json`)
+
+The frontend dependencies are pinned via `package-lock.json`. On a **fresh clone**, prefer `npm ci` to exactly reproduce the versions:
 
 **Windows / Mac / Linux:**
+
 ```bash
 cd app
-npm install
+
+# Install exact dependencies defined in package-lock.json
+npm ci
+
+# Build the production bundle that the backend will serve
 npm run build
+
 cd ..
 ```
+
 This creates a `dist/` folder in `app/` which the backend serves as static files.
 
+> If `npm ci` fails because `node_modules` already exists or for other local reasons, you can delete `node_modules` and retry, or fall back to:
+> ```bash
+> npm install
+> npm run build
+> ```
+
+### 4. Environment Configuration (API Keys)
+
+On each machine, create a `.env` file in the `backend/` directory (or in the project root; the launcher checks both). It should contain your API keys:
+
+```ini
+GROQ_API_KEY=your_groq_api_key_here
+GOOGLE_CSE_API_KEY=your_google_custom_search_api_key_here
+GOOGLE_CSE_CX=your_google_custom_search_engine_id_here
+```
+
+These keys are used by:
+- `backend/routes/llm.py` and `backend/routes/llm_images.py` (Groq LLM)
+- `backend/services/google_images.py` (Google Programmable Search for images)
+
+Do **not** commit your `.env` file to Git; keep it local or share via a secure channel.
 ### 4. Environment Configuration
 Create a `.env` file in the `backend/` directory (or check if one is provided securely). It should contain your API keys:
 
@@ -99,7 +143,7 @@ python3 launcher.py
 *   Make sure you have activated your virtual environment (`.venv`) before running the launcher.
 
 ### "Missing API keys"
-*   The launcher will explicitly tell you if `GROQ_API_KEY` or Google keys are missing. Check your `backend/.env` file.
+*   The launcher will explicitly tell you if `GROQ_API_KEY`, `GOOGLE_CSE_API_KEY`, or `GOOGLE_CSE_CX` are missing. Check your `.env` file in the project root or `backend/`.
 
 ### Mac-Specific Issues
 *   If you see errors related to `libgl1` or OpenCV, install them via Homebrew: `brew install opencv`.

@@ -6,3 +6,5 @@ opencv-python==4.8.1.78
 python-dotenv==1.0.1
 groq
 easyocr==1.7.1
+httpx
+requests

@@ -17,12 +17,15 @@ function ImageUploader({ setImageUrl, resetStates }) {
   };
 
   return (
-    <input
-      type="file"
-      accept="image/*"
-      onChange={handleUpload}
-      className="file-input"
-    />
+    <label className="upload-btn-wrapper">
+        <span className="upload-btn-text">Upload Image</span>
+        <input
+            type="file"
+            accept="image/*"
+            onChange={handleUpload}
+            className="file-input-hidden"
+        />
+    </label>
   );
 }
 

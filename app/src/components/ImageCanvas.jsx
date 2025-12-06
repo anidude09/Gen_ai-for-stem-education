@@ -36,9 +36,12 @@ function ImageCanvas({
   selectedShape,
   sessionId,
   onNavigateToPage,
+  zoom,
 }) {
   const wrapperRef = useRef(null);
-  const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
+  // Zoom is now managed by parent (App.jsx) or context, passed in as prop
+  // const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
+  
   const [isDetecting, setIsDetecting] = useState(false);
   const [selection, setSelection] = useState(null);
   const [isSelecting, setIsSelecting] = useState(false);
@@ -46,7 +49,9 @@ function ImageCanvas({
 
   const handleImageLoad = async () => {
     if (!imgRef.current) return;
-
+    
+    // ... existing code ...
+    
     const info = {
       naturalWidth: imgRef.current.naturalWidth,
       naturalHeight: imgRef.current.naturalHeight,
@@ -58,6 +63,8 @@ function ImageCanvas({
     setImageInfo(info);
     setLoaded(true);
   };
+  
+  // ... (rest of detection logic remains same) ...
 
   const runDetection = async () => {
     try {
@@ -285,7 +292,7 @@ function ImageCanvas({
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <ZoomControls zoom={zoom} zoomIn={zoomIn} zoomOut={zoomOut} />
+      {/* ZoomControls removed from here, now in App header */}
 
       <div style={{ margin: "8px 0" }}>
         <button
@@ -316,7 +323,7 @@ function ImageCanvas({
       <div
         className="image-container"
         style={{ position: "relative", display: "inline-block", overflow: "auto" }}
-        onWheel={handleWheel}
+        // onWheel handled by parent if needed, or can be re-added here if we pass handleWheel prop
       >
         <div
           ref={wrapperRef}

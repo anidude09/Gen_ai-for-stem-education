@@ -46,7 +46,7 @@
 }
 
 .sidebar {
-  width: 260px;
+  width: 200px;
   background-color: #1e293b; /* slate-800 */
   color: #f1f5f9;
   padding: 20px 16px;
@@ -109,10 +109,27 @@
   color: #e2e8f0;
 }
 
+.instructions-panel.sidebar-instructions {
+  margin-top: auto; /* Push to bottom of sidebar */
+  margin-bottom: 0;
+  font-size: 0.85rem;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
 .instructions-panel h3 {
   margin: 0 0 8px 0;
   font-size: 16px;
   color: #60a5fa;
+}
+
+.instructions-panel.sidebar-instructions h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  margin-bottom: 6px;
 }
 
 .instructions-panel ol {
@@ -121,6 +138,12 @@
   font-size: 14px;
   color: #cbd5e1;
   line-height: 1.6;
+}
+
+.instructions-panel.sidebar-instructions ol {
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .instructions-panel li {
@@ -169,15 +192,69 @@
   color: #b91c1c;
   border-radius: 6px;
 }
-.image-container {
-  position: relative;
+.upload-btn-wrapper {
   display: inline-block;
-  border: 2px solid #d1d5db;
-  border-radius: 8px;
-  max-width: 100%;
-  max-height: 85vh;
-  overflow: auto;
+  position: relative;
+  cursor: pointer;
+  width: 100%;
 }
+
+.file-input-hidden {
+  display: none;
+}
+
+.upload-btn-text {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  text-align: center;
+  background-color: #3b82f6; /* blue-500 */
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background-color 0.2s;
+  box-sizing: border-box;
+  border: 1px solid #2563eb;
+}
+
+.upload-btn-text:hover {
+  background-color: #2563eb; /* blue-600 */
+}
+
+.upload-btn-text:active {
+  transform: translateY(1px);
+}
+
+.zoom-controls-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.zoom-btn-header {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f1f5f9;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.2s;
+}
+
+.zoom-btn-header:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.zoom-btn-header:active {
+  transform: translateY(1px);
+}
+
 
 .uploaded-image {
   max-width: 100%;
