@@ -1,6 +1,9 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import JSONResponse, FileResponse
 
 from routes import detect, llm, auth, regions_detect, llm_images, activity_log
 
@@ -27,6 +30,24 @@ def healthz():
     return {"status": "ok"}
 
 
-@app.get("/", tags=["Root"])
-def read_root():
+# Serve built frontend if available
+_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+_FRONTEND_DIST_DIR = os.path.normpath(os.path.join(_BACKEND_DIR, "..", "app", "dist"))
+
+if os.path.isdir(_FRONTEND_DIST_DIR):
+    app.mount(
+        "/assets",
+        StaticFiles(directory=os.path.join(_FRONTEND_DIST_DIR, "assets")),
+        name="assets",
+    )
+    images_dist = os.path.join(_FRONTEND_DIST_DIR, "images")
+    if os.path.isdir(images_dist):
+        app.mount("/images", StaticFiles(directory=images_dist), name="images")
+
+
+@app.get("/", include_in_schema=False)
+def serve_frontend():
+    index_path = os.path.join(_FRONTEND_DIST_DIR, "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path)
     return JSONResponse({"message": "Backend is running !"})

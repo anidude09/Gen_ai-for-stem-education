@@ -77,6 +77,35 @@ def _check_imports() -> CheckResult:
     return CheckResult(ok=False, details=lines)
 
 
+def _check_env_vars() -> CheckResult:
+    """Check if essential API keys are set in .env or environment."""
+    try:
+        from dotenv import load_dotenv
+        
+        # Try loading from root first
+        root_env = os.path.join(os.path.dirname(__file__), ".env")
+        if os.path.exists(root_env):
+            load_dotenv(root_env)
+            
+        # Also try backend/.env
+        backend_env = os.path.join(os.path.dirname(__file__), "backend", ".env")
+        if os.path.exists(backend_env):
+            load_dotenv(backend_env)
+        
+        missing = []
+        for key in ["GROQ_API_KEY", "GOOGLE_CSE_API_KEY", "GOOGLE_CSE_CX"]:
+            if not os.getenv(key):
+                missing.append(key)
+                
+        if not missing:
+            return CheckResult(ok=True, details=["API keys configured."])
+            
+        return CheckResult(ok=False, details=[f"Missing API keys: {', '.join(missing)}", f"Checked paths: {root_env}, {backend_env}"])
+        
+    except ImportError:
+        return CheckResult(ok=False, details=["python-dotenv not installed. Cannot check .env file."])
+
+
 def _check_internet(timeout: float = 3.0) -> CheckResult:
     """Check that we can reach the internet (simple HTTP GET)."""
     try:
@@ -223,8 +252,9 @@ class StatusWindow(tk.Tk):
         def _worker():
             imports = _check_imports()
             internet = _check_internet()
+            env_vars = _check_env_vars()
 
-            ok = imports.ok and internet.ok
+            ok = imports.ok and internet.ok and env_vars.ok
             if ok:
                 status = "All systems OK."
                 color = "green"
@@ -234,6 +264,7 @@ class StatusWindow(tk.Tk):
 
             details: List[str] = []
             details.extend(imports.details)
+            details.extend(env_vars.details)
             details.append("")
             details.extend(internet.details)
 

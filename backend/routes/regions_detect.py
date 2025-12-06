@@ -2,7 +2,7 @@
 region_detection.py
 
 This module provides functionality to detect text inside a specific region 
-of an uploaded image using OpenCV and Tesseract (via pytesseract).
+of an uploaded image using OpenCV and EasyOCR (GPU preferred, CPU fallback).
 
 Key functionalities:
 - Extract a specified rectangular region from an image.
@@ -18,65 +18,22 @@ import base64
 import os
 import re
 
-import pytesseract
-from pytesseract import Output
-from .detect import detect_circles_with_text_from_image
-
-# Configure Tesseract binary location.
-DEFAULT_TESSERACT_CMD = r"C:\Users\aniruddh\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
-TESSERACT_CMD = os.getenv("TESSERACT_CMD", DEFAULT_TESSERACT_CMD)
-pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
-
-# Detection tuning parameters (should roughly match detect.py)
-MIN_CONFIDENCE = 60.0
-MIN_BOX_WIDTH = 10
-MIN_BOX_HEIGHT = 10
+from .detect import (
+    detect_circles_with_text_from_image,
+    _EASYOCR_READER,
+    _preprocess_for_easyocr,
+    _run_easyocr,
+    _is_construction_text,
+    _clean_text,
+    _unpack_easyocr_line,
+    EASYOCR_MIN_CONFIDENCE,
+    MIN_BOX_WIDTH,
+    MIN_BOX_HEIGHT,
+    EASYOCR_PARAMS,
+)
 
 # Initialize FastAPI router
 router = APIRouter()
-
-
-def _tess_image_to_data(img_bgr, psm: str = "6"):
-    """
-    Helper to run Tesseract's image_to_data on a BGR OpenCV image and
-    return the parsed dictionary.
-    """
-    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    return pytesseract.image_to_data(
-        img_rgb,
-        lang="eng",
-        config=f"--oem 3 --psm {psm}",
-        output_type=Output.DICT,
-    )
-
-
-def _is_construction_text(text: str) -> bool:
-    """
-    Mirror of the heuristic used in detect.py to keep only construction-like text.
-    """
-    if not text:
-        return False
-
-    t = text.strip()
-    if len(t) < 2:
-        return False
-
-    if not re.match(r"^[A-Za-z0-9.\-]+$", t):
-        return False
-
-    patterns = [
-        r"^[A-Z]{3,}$",
-        r"^[A-Z]+\d+(\.\d+)?$",
-        r"^\d{2,4}$",
-    ]
-    for pat in patterns:
-        if re.match(pat, t):
-            return True
-
-    if re.match(r"^[A-Za-z]{3,}$", t):
-        return True
-
-    return False
 
 
 def detect_text_in_region(img, region):
@@ -120,69 +77,61 @@ def detect_text_in_region(img, region):
             }
         )
 
-    # Text within the region
-    data = _tess_image_to_data(crop, psm="6")
-
-    # Group words into line-level boxes as in detect.py
-    lines = {}
-    n = len(data["text"])
-    for i in range(n):
-        raw_text = data["text"][i] or ""
-        text = raw_text.strip()
-
-        conf_str = data["conf"][i]
-        try:
-            conf = float(conf_str)
-        except (ValueError, TypeError):
-            conf = -1.0
-
-        if conf < MIN_CONFIDENCE or not text:
-            continue
-
-        if not _is_construction_text(text):
-            continue
-
-        left = int(data["left"][i])
-        top = int(data["top"][i])
-        width = int(data["width"][i])
-        height = int(data["height"][i])
-
-        if width < MIN_BOX_WIDTH or height < MIN_BOX_HEIGHT:
-            continue
-
-        key = (data.get("block_num", [0])[i], data.get("line_num", [0])[i])
-        if key not in lines:
-            lines[key] = {
-                "texts": [],
-                "min_x": left,
-                "min_y": top,
-                "max_x": left + width,
-                "max_y": top + height,
-            }
-        else:
-            lines[key]["min_x"] = min(lines[key]["min_x"], left)
-            lines[key]["min_y"] = min(lines[key]["min_y"], top)
-            lines[key]["max_x"] = max(lines[key]["max_x"], left + width)
-            lines[key]["max_y"] = max(lines[key]["max_y"], top + height)
-
-        lines[key]["texts"].append(text)
-
+    # Text within the region (EasyOCR) with blueprint cleanup
     text_boxes = []
-    for i, (_, line) in enumerate(lines.items(), start=1):
-        combined_text = " ".join(line["texts"]).strip()
-        if not combined_text:
-            continue
+    if _EASYOCR_READER is None:
+        print("EasyOCR reader not initialized; cannot perform regional text detection")
+    else:
+        crop_proc = _preprocess_for_easyocr(crop)
+        try:
+            crop_rgb = cv2.cvtColor(crop_proc, cv2.COLOR_BGR2RGB)
+        except Exception:
+            crop_rgb = crop_proc
 
-        text_boxes.append(
-            {
-                "id": i,
-                "x1": int(line["min_x"]) + x,
-                "y1": int(line["min_y"]) + y,
-                "x2": int(line["max_x"]) + x,
-                "y2": int(line["max_y"]) + y,
-                "text": combined_text,
-            }
-        )
+        ocr_results = _run_easyocr(crop_rgb, EASYOCR_PARAMS)
+
+        idx = 1
+        for line in ocr_results:
+            try:
+                bbox, text, conf = _unpack_easyocr_line(line)
+
+                if not text or bbox is None:
+                    continue
+                if conf is not None and conf < EASYOCR_MIN_CONFIDENCE:
+                    continue
+
+                t = _clean_text(text)
+                if len(t) < 2:
+                    continue
+
+                if not _is_construction_text(t):
+                    continue
+
+                xs = [pt[0] for pt in bbox]
+                ys = [pt[1] for pt in bbox]
+                min_x, max_x = min(xs), max(xs)
+                min_y, max_y = min(ys), max(ys)
+
+                width = max_x - min_x
+                height = max_y - min_y
+
+                if width < MIN_BOX_WIDTH or height < MIN_BOX_HEIGHT:
+                    continue
+
+                text_boxes.append(
+                    {
+                        "id": idx,
+                        "x1": int(min_x) + x,
+                        "y1": int(min_y) + y,
+                        "x2": int(max_x) + x,
+                        "y2": int(max_y) + y,
+                        "text": t,
+                    }
+                )
+                idx += 1
+            except Exception as e:
+                print(f"Error processing EasyOCR region text box: {e}")
+                continue
 
     # Convert cropped region to base64 string
     _, buffer = cv2.imencode(".jpg", crop)

@@ -56,7 +56,10 @@ function LoginForm({ setUser, setSessionId }) {
 
   return (
     <div className="login-container">
-      <h2>Login</h2>
+      <div className="login-header">
+        <h2>Gen AI for STEM Education</h2>
+        <p>Sign in to start your session</p>
+      </div>
       <form onSubmit={handleSubmit} className="login-form">
         <input
           type="text"
@@ -74,9 +77,23 @@ function LoginForm({ setUser, setSessionId }) {
           required
           disabled={loading}
         />
-        {error && <div className="error-message" style={{color: 'red', margin: '10px 0'}}>{error}</div>}
+        {error && (
+          <div 
+            className="error-message" 
+            style={{
+              color: '#fca5a5', 
+              margin: '0', 
+              fontSize: '0.9rem',
+              background: 'rgba(185, 28, 28, 0.2)',
+              padding: '8px',
+              borderRadius: '4px'
+            }}
+          >
+            {error}
+          </div>
+        )}
         <button type="submit" disabled={loading}>
-          {loading ? "Logging in..." : "Login"}
+          {loading ? "Logging in..." : "Start Learning"}
         </button>
       </form>
     </div>

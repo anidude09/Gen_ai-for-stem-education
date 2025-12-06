@@ -5,6 +5,4 @@ numpy<2.0.0
 opencv-python==4.8.1.78
 python-dotenv==1.0.1
 groq
-pillow==9.5.0
-pytesseract==0.3.10
 easyocr==1.7.1

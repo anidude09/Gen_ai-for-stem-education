@@ -31,11 +31,11 @@ B. Backend (API Server)
 
 C. Database
    - Type: SQLite
-   - File: `backend/sessions.db`
+   - File: `sessions.db` (in project root)
    - Purpose: Lightweight storage for user sessions and authentication.
 
 D. AI & Machine Learning Services
-   - Text Detection (OCR): Uses Tesseract (pytesseract) and EasyOCR to read text from images.
+   - Text Detection (OCR): Uses EasyOCR to read text from images.
    - LLM (Language Model): Uses Groq API to generate explanations for technical terms.
    - Image Search: Connects to Google Search to find reference images for terms.
    - System Persona: Defined in `docs/system_prompts.txt` (Senior Construction Engineer).
@@ -92,11 +92,13 @@ It bridges the gap between abstract technical drawings and real-world understand
 6. GETTING STARTED (Developer Notes)
 ------------------------------------
 - Python Environment: Ensure you have the dependencies in `backend/requirements.txt` installed.
-  - Key libs: `fastapi`, `uvicorn`, `opencv-python`, `pytesseract`, `groq`.
+  - Key libs: `fastapi`, `uvicorn`, `opencv-python`, `easyocr`, `groq`.
 - Frontend Environment: Node.js is required. Run `npm install` in the `app/` folder.
 - Running the App:
-  1. Backend: `uvicorn app:app --reload` (from `backend/` folder).
-  2. Frontend: `npm run dev` (from `app/` folder).
+  - Use the launcher: `python launcher.py` (starts both backend and serves frontend).
+  - Or manually:
+    1. Backend: `uvicorn app:app --reload` (from `backend/` folder).
+    2. Frontend: `npm run dev` (from `app/` folder).
 - Configuration: Check for `.env` files for API keys (Groq, Google) - *Note: do not share these publically*.
 
 -------------------------------------------------------

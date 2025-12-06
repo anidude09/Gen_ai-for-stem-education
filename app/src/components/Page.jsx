@@ -15,6 +15,7 @@ import { useSearchParams } from "react-router-dom";
 import ZoomControls from "./ZoomControls";
 import useZoom from "../hooks/useZoom";
 import "../styles/zoom.css";
+import ImageUploader from "./ImageUploader"; // Ensure this is imported if we use it directly here or nearby
 
 function Page() {
   const [searchParams] = useSearchParams();
@@ -28,6 +29,7 @@ function Page() {
   const wrapperRef = useRef(null);
 
   const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
+
 
 
   const handleImageLoad = () => {

@@ -139,10 +139,10 @@ function MainPage() {
 
   return (
     <div className="container">
-      <header className="app-header">
-        <h1 className="heading">Generative AI for STEM Education</h1>
+      <header className="app-header" style={{ justifyContent: "flex-start", gap: "20px" }}>
+        <h1 className="heading" style={{ textAlign: "left", margin: 0 }}>Generative AI for STEM Education</h1>
         {user && (
-          <button onClick={handleLogout} className="logout-button">
+          <button onClick={handleLogout} className="logout-button" style={{ marginLeft: "auto", position: "static" }}>
             Logout
           </button>
         )}
@@ -151,23 +151,37 @@ function MainPage() {
       <div className="app-body">
         <aside className="sidebar">
           <h2 className="sidebar-title">Workspace</h2>
-          <div className="sidebar-tabs">
-            <button
-              className={`sidebar-tab ${activeView === "main" ? "active" : ""}`}
-              onClick={() => setActiveView("main")}
-              disabled={!imageUrl}
-            >
-              Main sheet
-            </button>
-            {detailImageUrl && (
-              <button
-                className={`sidebar-tab ${activeView === "detail" ? "active" : ""}`}
-                onClick={() => setActiveView("detail")}
-              >
-                Page {detailPageLabel || "detail"}
-              </button>
+          
+          <div 
+            className={`sidebar-item ${activeView === "main" ? "active" : ""}`}
+            onClick={() => imageUrl && setActiveView("main")}
+            style={{ opacity: imageUrl ? 1 : 0.5, pointerEvents: imageUrl ? "auto" : "none" }}
+          >
+            <span className="sidebar-item-title">Main Sheet</span>
+            {imageInfo ? (
+               <span className="sidebar-item-details">
+                 {imageInfo.naturalWidth} x {imageInfo.naturalHeight} px
+               </span>
+            ) : (
+               <span className="sidebar-item-details">No image loaded</span>
             )}
           </div>
+
+          {detailImageUrl && (
+            <div 
+              className={`sidebar-item ${activeView === "detail" ? "active" : ""}`}
+              onClick={() => setActiveView("detail")}
+            >
+              <span className="sidebar-item-title">
+                Page {detailPageLabel || "Detail"}
+              </span>
+              {detailImageInfo && (
+                <span className="sidebar-item-details">
+                  {detailImageInfo.naturalWidth} x {detailImageInfo.naturalHeight} px
+                </span>
+              )}
+            </div>
+          )}
         </aside>
 
         <main className="main-content">
@@ -186,10 +200,24 @@ function MainPage() {
                     setCircles([]);
                     setTexts([]);
                     setSelectedShape(null);
+                    setImageInfo(null); // Reset image info too
                   }}
                 />
                 {error && <div className="error">{error}</div>}
               </div>
+
+              {/* Instructions Panel (Only shown when an image is loaded and we are in main view) */}
+              {activeView === "main" && imageUrl && (
+                <div className="instructions-panel">
+                    <h3>How to Use</h3>
+                    <ol>
+                        <li>Use the <strong>Detect</strong> button to find text and callouts automatically.</li>
+                        <li>Drag your mouse over a specific area and click <strong>Detect in selection</strong> for focused results.</li>
+                        <li>Click on highlighted text to get AI-powered explanations.</li>
+                        <li>Click on red callout circles to navigate to referenced detail pages.</li>
+                    </ol>
+                </div>
+              )}
 
               {/* Main sheet view */}
               {activeView === "main" && imageUrl && (

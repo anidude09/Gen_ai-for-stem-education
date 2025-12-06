@@ -58,66 +58,21 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
 
   if (!selectedShape) return null;
 
-  // ✅ Apply zoom only to coordinates, not to popup size
-  const left =
-    (selectedShape.r
-      ? selectedShape.x + selectedShape.r + 10
-      : selectedShape.x2 + 10) * zoom;
+  // ✅ Coordinates logic updated:
+  // Since the popup is inside a scaled container, we normally would NOT multiply by zoom.
+  // However, we want the popup to stay visually close to the element, but NOT scale its text size.
+  // Strategy:
+  // 1. Position it at the raw shape coordinates (since parent is scaled).
+  // 2. Counter-scale the popup itself (scale(1/zoom)) so text stays normal size.
+  // 3. Add a small offset that scales inversely to keep distance constant visually.
+  
+  const rawLeft = selectedShape.r
+    ? selectedShape.x + selectedShape.r + 10
+    : selectedShape.x2 + 10;
 
-  const top =
-    (selectedShape.r
-      ? selectedShape.y - selectedShape.r / 2
-      : selectedShape.y1) * zoom;
-
-  // Redirect handler
-  const handleRedirect = (e, pageNumber, circleText) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    console.log("Go to page button clicked", {
-      pageNumber,
-      circleText,
-      hasNavigateHandler: !!onNavigateToPage,
-    });
-
-    if (!pageNumber) {
-      console.log("Missing navigation data:", { pageNumber });
-      return;
-    }
-
-    const pageImageUrl = `/images/${pageNumber}.png`;
-
-    if (sessionId) {
-      logActivity({
-        sessionId,
-        eventType: "navigate_to_page",
-        eventData: {
-          pageNumber,
-          circleText,
-          pageImageUrl,
-        },
-      });
-    }
-
-    if (onNavigateToPage) {
-      // Let the parent (MainPage) handle switching tabs / images.
-      onNavigateToPage(pageImageUrl, pageNumber, circleText);
-    } else {
-      // Fallback: direct navigation if no handler is provided.
-      let targetUrl = `/page?image=${encodeURIComponent(pageImageUrl)}`;
-      if (circleText) {
-        targetUrl += `&circle=${encodeURIComponent(circleText)}`;
-      }
-      console.log("Fallback navigation to detail page:", {
-        targetUrl,
-        pageImageUrl,
-        circleText,
-      });
-      window.location.href = targetUrl;
-    }
-
-    onClose();
-  };
+  const rawTop = selectedShape.r
+    ? selectedShape.y - selectedShape.r / 2
+    : selectedShape.y1;
 
   return (
     <div
@@ -125,44 +80,54 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
       onClick={(e) => e.stopPropagation()}
       style={{
         position: "absolute",
-        left: `${left}px`,
-        top: `${top}px`,
+        left: `${rawLeft}px`,
+        top: `${rawTop}px`,
         zIndex: 1001,
-        // Glassy / frosted card
-        backgroundColor: "rgba(255, 255, 255, 0.7)",
-        border: "1px solid rgba(255, 255, 255, 0.4)",
-        borderRadius: "8px",
-        padding: "10px",
-        boxShadow: "0 4px 20px rgba(0,0,0,0.25)",
+        transform: `scale(${1 / zoom})`,
+        transformOrigin: "top left",
+        
+        // Updated UI: Dark, translucent, glassy
+        backgroundColor: "rgba(30, 41, 59, 0.85)", // Dark slate
+        border: "1px solid rgba(255, 255, 255, 0.2)",
+        borderRadius: "12px",
+        padding: "16px",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5)",
         minWidth: "320px",
         maxWidth: "420px",
-        backdropFilter: "blur(8px)",
-        color: "#000",
+        backdropFilter: "blur(12px)",
+        color: "#f1f5f9", // Light text
+        fontSize: "14px",
       }}
     >
       {selectedShape.r ? (
         <div>
-          <h4>Circle Information</h4>
+          <h4 style={{ marginTop: 0, marginBottom: "12px", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "8px" }}>
+            Circle Information
+          </h4>
           {selectedShape.page_number ? (
-            <ul style={{ listStyle: "none", padding: 0 }}>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
               <li style={{ marginBottom: "8px" }}>
-                <strong>Page Number:</strong> {selectedShape.page_number}
+                <strong style={{ color: "#94a3b8" }}>Page:</strong> {selectedShape.page_number}
               </li>
               {selectedShape.circle_text && (
-                <li>
-                  <strong>Circle Text:</strong> {selectedShape.circle_text}
+                <li style={{ marginBottom: "12px" }}>
+                  <strong style={{ color: "#94a3b8" }}>Detail:</strong> {selectedShape.circle_text}
                 </li>
               )}
-              <li style={{ marginTop: "5px" }}>
+              <li>
                 <button
                   style={{
                     cursor: "pointer",
                     color: "white",
-                    backgroundColor: "#007bff",
+                    backgroundColor: "rgba(59, 130, 246, 0.8)",
                     border: "none",
-                    padding: "5px 10px",
-                    borderRadius: "4px",
+                    padding: "8px 16px",
+                    borderRadius: "6px",
+                    width: "100%",
+                    transition: "background 0.2s",
                   }}
+                  onMouseOver={(e) => (e.target.style.backgroundColor = "rgba(37, 99, 235, 1)")}
+                  onMouseOut={(e) => (e.target.style.backgroundColor = "rgba(59, 130, 246, 0.8)")}
                   onClick={(e) =>
                     handleRedirect(
                       e,
@@ -171,45 +136,35 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
                     )
                   }
                 >
-                  Go to page {selectedShape.page_number}
+                  Go to Page {selectedShape.page_number}
                 </button>
               </li>
             </ul>
           ) : (
-            <p>No page number available for navigation.</p>
+            <p style={{ color: "#cbd5e1" }}>No page number available.</p>
           )}
 
-          {/* Debug: show raw OCR tokens for this circle */}
-          {(selectedShape.raw_texts_top || selectedShape.raw_texts_bottom) && (
-            <div style={{ marginTop: "10px", fontSize: "0.8rem" }}>
-              <strong>OCR Debug:</strong>
-              {Array.isArray(selectedShape.raw_texts_top) &&
-                selectedShape.raw_texts_top.length > 0 && (
-                  <div>
-                    <em>Top (circle) text:</em>{" "}
-                    {selectedShape.raw_texts_top.join(" | ")}
-                  </div>
-                )}
-              {Array.isArray(selectedShape.raw_texts_bottom) &&
-                selectedShape.raw_texts_bottom.length > 0 && (
-                  <div>
-                    <em>Bottom (page) text:</em>{" "}
-                    {selectedShape.raw_texts_bottom.join(" | ")}
-                  </div>
-                )}
-            </div>
-          )}
-
+          {/* Debug info omitted for cleaner UI, or can be kept hidden */}
+          
           <button
             onClick={onClose}
             style={{
-              marginTop: "10px",
-              padding: "5px 10px",
-              backgroundColor: "#6c757d",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
+              marginTop: "12px",
+              padding: "6px 12px",
+              backgroundColor: "transparent",
+              color: "#94a3b8",
+              border: "1px solid rgba(148, 163, 184, 0.3)",
+              borderRadius: "6px",
               cursor: "pointer",
+              width: "100%",
+            }}
+            onMouseOver={(e) => {
+                e.target.style.borderColor = "#cbd5e1";
+                e.target.style.color = "#f1f5f9";
+            }}
+            onMouseOut={(e) => {
+                e.target.style.borderColor = "rgba(148, 163, 184, 0.3)";
+                e.target.style.color = "#94a3b8";
             }}
           >
             Close
@@ -217,35 +172,41 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
         </div>
       ) : (
         <div>
-          <h4>Detected Text</h4>
-          <p>
-            <strong>Text:</strong> {selectedShape.text || "Text"}
+          <h4 style={{ marginTop: 0, marginBottom: "12px", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "8px" }}>
+            Explanation
+          </h4>
+          <p style={{ marginBottom: "12px", fontSize: "1.1em" }}>
+            <strong style={{ color: "#60a5fa" }}>{selectedShape.text || "Text"}</strong>
           </p>
 
           {typeof info === "string" ? (
-            <p>
-              <strong>Info:</strong> {info || "Click to generate info"}
-            </p>
+            <div style={{ padding: "20px", textAlign: "center", color: "#cbd5e1" }}>
+              {info === "Loading..." ? (
+                 <span>Thinking...</span>
+              ) : (
+                 <span>{info || "Click to generate info"}</span>
+              )}
+            </div>
           ) : info ? (
-            <div>
+            <div style={{ maxHeight: "300px", overflowY: "auto", paddingRight: "4px" }}>
               {Array.isArray(info.summary) && info.summary.length > 0 && (
-                <div style={{ marginBottom: "8px" }}>
-                  <strong>Summary:</strong>
-                  <ul style={{ marginTop: "6px" }}>
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "#94a3b8", display: "block", marginBottom: "4px" }}>Summary</strong>
+                  <ul style={{ marginTop: 0, paddingLeft: "20px", color: "#e2e8f0" }}>
                     {info.summary.map((item, idx) => (
-                      <li key={idx}>{item}</li>
+                      <li key={idx} style={{ marginBottom: "4px" }}>{item}</li>
                     ))}
                   </ul>
                 </div>
               )}
 
               {Array.isArray(info.key_terms) && info.key_terms.length > 0 && (
-                <div style={{ marginBottom: "8px" }}>
-                  <strong>Key Terms:</strong>
-                  <ul style={{ marginTop: "6px" }}>
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "#94a3b8", display: "block", marginBottom: "4px" }}>Key Terms</strong>
+                  <ul style={{ marginTop: 0, paddingLeft: "20px", color: "#e2e8f0" }}>
                     {info.key_terms.map((t, idx) => (
-                      <li key={idx}>
-                        <em>{t.term}</em>: {t.definition}
+                      <li key={idx} style={{ marginBottom: "4px" }}>
+                        <span style={{ color: "#f8fafc", fontWeight: 500 }}>{t.term}</span>: <span style={{ color: "#cbd5e1" }}>{t.definition}</span>
                       </li>
                     ))}
                   </ul>
@@ -253,9 +214,9 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
               )}
 
               {Array.isArray(info.unit_conversions) && info.unit_conversions.length > 0 && (
-                <div style={{ marginBottom: "8px" }}>
-                  <strong>Unit Conversions:</strong>
-                  <ul style={{ marginTop: "6px" }}>
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "#94a3b8", display: "block", marginBottom: "4px" }}>Conversions</strong>
+                  <ul style={{ marginTop: 0, paddingLeft: "20px", color: "#e2e8f0" }}>
                     {info.unit_conversions.map((u, idx) => (
                       <li key={idx}>
                         {u.original} → {u.si}
@@ -266,15 +227,15 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
               )}
 
               {Array.isArray(info.images) && info.images.length > 0 && (
-                <div style={{ marginBottom: "8px" }}>
-                  <strong>Related images:</strong>
+                <div style={{ marginBottom: "16px" }}>
+                  <strong style={{ color: "#94a3b8", display: "block", marginBottom: "4px" }}>Visual References</strong>
                   <div
                     style={{
                       display: "flex",
-                      gap: "8px",
-                      marginTop: "6px",
-                      flexWrap: "nowrap",
+                      gap: "10px",
+                      marginTop: "8px",
                       overflowX: "auto",
+                      paddingBottom: "8px",
                     }}
                   >
                     {info.images.map((img, idx) => (
@@ -283,61 +244,46 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
                         href={img.page_url || img.image_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        style={{ textDecoration: "none", color: "inherit" }}
+                        style={{ textDecoration: "none", color: "inherit", flex: "0 0 auto" }}
                       >
-                        <figure
-                          style={{
-                            margin: 0,
-                            textAlign: "center",
-                            maxWidth: "120px",
-                          }}
-                        >
+                        <figure style={{ margin: 0, maxWidth: "120px" }}>
                           <img
                             src={img.thumbnail_url || img.image_url}
-                            alt={img.title || "Related construction image"}
+                            alt={img.title || "Related image"}
                             style={{
-                              maxWidth: "120px",
-                              maxHeight: "120px",
-                              borderRadius: "4px",
+                              width: "120px",
+                              height: "90px",
+                              borderRadius: "6px",
                               objectFit: "cover",
-                              border: "1px solid #ddd",
+                              border: "1px solid rgba(255,255,255,0.1)",
                             }}
                           />
-                          <figcaption
-                            style={{ fontSize: "0.75rem", marginTop: "4px" }}
-                          >
-                            {img.title
-                              ? img.title.slice(0, 50)
-                              : img.source}
-                          </figcaption>
                         </figure>
                       </a>
                     ))}
                   </div>
                 </div>
               )}
-
-              {info.clarifying_question && (
-                <div style={{ marginTop: "6px", fontStyle: "italic" }}>
-                  {info.clarifying_question}
-                </div>
-              )}
             </div>
           ) : (
-            <p>Click to generate info</p>
+            <p style={{ color: "#cbd5e1" }}>Click to generate info</p>
           )}
 
           <button
             onClick={onClose}
             style={{
-              marginTop: "10px",
-              padding: "5px 10px",
-              backgroundColor: "#6c757d",
-              color: "white",
+              marginTop: "16px",
+              padding: "8px 16px",
+              backgroundColor: "rgba(255,255,255,0.1)",
+              color: "#f1f5f9",
               border: "none",
-              borderRadius: "4px",
+              borderRadius: "6px",
               cursor: "pointer",
+              width: "100%",
+              transition: "background 0.2s",
             }}
+            onMouseOver={(e) => (e.target.style.backgroundColor = "rgba(255,255,255,0.2)")}
+            onMouseOut={(e) => (e.target.style.backgroundColor = "rgba(255,255,255,0.1)")}
           >
             Close
           </button>
