@@ -3,15 +3,6 @@ launcher.py
 
 Standalone launcher for the Gen_ai-for-stem-education project.
 
-Goals:
-- Provide a minimal Windows-friendly entry point that can later be packaged
-  into a single EXE (e.g., with PyInstaller).
-- Start the FastAPI backend (uvicorn) in the background.
-- Perform basic health checks:
-  - Required Python packages import successfully.
-  - Basic internet connectivity is available.
-- Show a small popup window with a status message and a "green dot" if
-  everything looks good (otherwise, show a yellow/red dot and a short note).
 
 Run directly from the project root:
     python launcher.py
