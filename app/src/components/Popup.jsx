@@ -91,7 +91,7 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
   // 1. Position it at the raw shape coordinates (since parent is scaled).
   // 2. Counter-scale the popup itself (scale(1/zoom)) so text stays normal size.
   // 3. Add a small offset that scales inversely to keep distance constant visually.
-  
+
   const rawLeft = selectedShape.r
     ? selectedShape.x + selectedShape.r + 10
     : selectedShape.x2 + 10;
@@ -105,7 +105,7 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
   // If missing, check if 'circle_text' looks like a page number (e.g., "A5.1").
   let navPage = selectedShape.page_number;
   if (!navPage && selectedShape.circle_text && /^[A-Z]\d+(\.\d+)?$/i.test(selectedShape.circle_text)) {
-      navPage = selectedShape.circle_text.toUpperCase();
+    navPage = selectedShape.circle_text.toUpperCase();
   }
 
   return (
@@ -119,7 +119,7 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
         zIndex: 1001,
         transform: `scale(${1 / zoom})`,
         transformOrigin: "top left",
-        
+
         // Updated UI: Dark, translucent, glassy
         backgroundColor: "rgba(30, 41, 59, 0.85)", // Dark slate
         border: "1px solid rgba(255, 255, 255, 0.2)",
@@ -140,20 +140,20 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
           </h4>
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {navPage ? (
-                <li style={{ marginBottom: "8px" }}>
-                  <strong style={{ color: "#94a3b8" }}>Page:</strong> {navPage}
-                </li>
+              <li style={{ marginBottom: "8px" }}>
+                <strong style={{ color: "#94a3b8" }}>Page:</strong> {navPage}
+              </li>
             ) : (
-                <li style={{ marginBottom: "8px", color: "#cbd5e1" }}>
-                  No page reference detected.
-                </li>
+              <li style={{ marginBottom: "8px", color: "#cbd5e1" }}>
+                No page reference detected.
+              </li>
             )}
             {selectedShape.circle_text && (
               <li style={{ marginBottom: "12px" }}>
                 <strong style={{ color: "#94a3b8" }}>Detail:</strong> {selectedShape.circle_text}
               </li>
             )}
-            
+
             {navPage && (
               <li>
                 <button
@@ -184,7 +184,7 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
           </ul>
 
           {/* Debug info omitted for cleaner UI, or can be kept hidden */}
-          
+
           <button
             onClick={onClose}
             style={{
@@ -198,12 +198,12 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
               width: "100%",
             }}
             onMouseOver={(e) => {
-                e.target.style.borderColor = "#cbd5e1";
-                e.target.style.color = "#f1f5f9";
+              e.target.style.borderColor = "#cbd5e1";
+              e.target.style.color = "#f1f5f9";
             }}
             onMouseOut={(e) => {
-                e.target.style.borderColor = "rgba(148, 163, 184, 0.3)";
-                e.target.style.color = "#94a3b8";
+              e.target.style.borderColor = "rgba(148, 163, 184, 0.3)";
+              e.target.style.color = "#94a3b8";
             }}
           >
             Close
@@ -221,9 +221,9 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
           {typeof info === "string" ? (
             <div style={{ padding: "20px", textAlign: "center", color: "#cbd5e1" }}>
               {info === "Loading..." ? (
-                 <span>Thinking...</span>
+                <span>Thinking...</span>
               ) : (
-                 <span>{info || "Click to generate info"}</span>
+                <span>{info || "Click to generate info"}</span>
               )}
             </div>
           ) : info ? (
@@ -302,6 +302,33 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
                     ))}
                   </div>
                 </div>
+
+              )}
+
+              {/* RAG Context Section */}
+              {info.context && (
+                <div style={{ marginTop: "16px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "12px" }}>
+                  <details style={{ cursor: "pointer" }}>
+                    <summary style={{ color: "#94a3b8", fontSize: "0.9em", userSelect: "none" }}>
+                      Show Source Context
+                    </summary>
+                    <div
+                      style={{
+                        marginTop: "8px",
+                        padding: "8px",
+                        backgroundColor: "rgba(0,0,0,0.2)",
+                        borderRadius: "6px",
+                        fontSize: "0.85em",
+                        color: "#cbd5e1",
+                        whiteSpace: "pre-wrap",
+                        maxHeight: "200px",
+                        overflowY: "auto"
+                      }}
+                    >
+                      {info.context}
+                    </div>
+                  </details>
+                </div>
               )}
             </div>
           ) : (
@@ -327,8 +354,9 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
             Close
           </button>
         </div>
-      )}
-    </div>
+      )
+      }
+    </div >
   );
 }
 

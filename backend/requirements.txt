@@ -8,3 +8,10 @@ groq
 easyocr==1.7.1
 httpx
 requests
+
+langchain==0.1.12
+langchain-community==0.0.29
+langchain-huggingface
+chromadb==0.4.24
+pypdf==4.2.0
+sentence-transformers==2.7.0

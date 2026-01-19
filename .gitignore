@@ -13,11 +13,16 @@ backend/__pycache__/
 backend/*.pyc
 backend/routes/__pycache__/
 
+# RAG Data
+backend/chroma_db/
+
 stem/
 
 venv
 
+*.DS_Store
 
+*.pyc
 
 
 

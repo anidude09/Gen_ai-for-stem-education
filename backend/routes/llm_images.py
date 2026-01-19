@@ -5,7 +5,7 @@ New router that combines the existing structured LLM explanation with
 Google image search results, without modifying the original llm routes.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -31,6 +31,7 @@ class LLMWithImagesResponse(BaseModel):
     unit_conversions: List[Dict[str, Any]]
     clarifying_question: str
     images: List[ImageInfo]
+    context: Optional[str] = None
 
 
 def _build_image_query(snippet: str, info: Dict[str, Any]) -> str:
@@ -81,6 +82,7 @@ async def explain_with_images(request: LLMRequest):
             "unit_conversions": info.get("unit_conversions") or [],
             "clarifying_question": info.get("clarifying_question") or "",
             "images": images_raw,
+            "context": info.get("context"),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

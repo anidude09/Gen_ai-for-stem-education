@@ -16,6 +16,7 @@ from groq import Groq
 import os
 from dotenv import load_dotenv
 import json
+from services.rag_service import rag_service
 
 # Load environment variables from .env file
 load_dotenv()
@@ -55,8 +56,12 @@ def generate_info_from_llm(text: str) -> str:
     Returns:
         str: Concise explanation of the input text.
     """
+    
+    # RAG Retrieval
+    context = rag_service.get_context(text)
+    
     completion = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="llama-3.3-70b-versatile",
         temperature=0.2,
         max_tokens=220,
         messages=[
@@ -72,7 +77,8 @@ def generate_info_from_llm(text: str) -> str:
                     "4) If there is an equation, state what it calculates and define each variable present in the snippet.\n"
                     "5) If the snippet is a figure/table caption, explain what it shows and the practical implication.\n"
                     "6) If content is not about construction or lacks enough context, say so briefly and ask 1 clarifying question.\n"
-                    "7) Output 2–4 concise bullet points, total 60–120 words."
+                    "7) Output 2–4 concise bullet points, total 60–120 words.\n\n"
+                    f"Additional Context from Construction Dictionary:\n{context}"
                 )
             },
             {
@@ -111,8 +117,11 @@ def generate_info_from_llm_structured(text: str) -> dict:
       - unit_conversions: list[{"original": str, "si": str}]
       - clarifying_question: str
     """
+    # RAG Retrieval
+    context = rag_service.get_context(text)
+
     completion = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="llama-3.3-70b-versatile",
         temperature=0.2,
         max_tokens=350,
         messages=[
@@ -131,7 +140,8 @@ def generate_info_from_llm_structured(text: str) -> dict:
                     "3. Respond ONLY with a valid JSON object that matches the requested schema.\n"
                     "4. Do not include any preface, explanation, or code fences.\n"
                     "5. All explanations must be provided strictly from the Building/Housing "
-                    "Construction perspective.\n\n"
+                    "Construction perspective.\n"
+                    "6. Use the provided 'Context from Dictionary' (if any) to act as an authoritative source.\n\n"
                     "Schema (JSON keys):\n"
                     '- summary: 2–3 bullets (plain language, 60–120 words total)\n'
                     '- key_terms: array of {\"term\": str, \"definition\": str} only if defined in snippet\n'
@@ -145,7 +155,8 @@ def generate_info_from_llm_structured(text: str) -> dict:
                     "treat it as a drawing/section label and explain its typical role in "
                     "construction documents without assumptions specific to a particular "
                     "construction project.\n"
-                    "- Output ONLY the JSON object. No additional text."
+                    "- Output ONLY the JSON object. No additional text.\n\n"
+                    f"Context from Dictionary:\n{context}"
                 ),
             },
             {
@@ -166,15 +177,19 @@ def generate_info_from_llm_structured(text: str) -> dict:
     try:
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
+            # Inject context so it can be displayed in frontend
+            parsed["context"] = context
             return parsed
     except Exception:
-        # Try to salvage JSON if the model added extra text around it
+        
         start = raw.find("{")
         end = raw.rfind("}")
         if start != -1 and end != -1 and end > start:
             try:
                 parsed = json.loads(raw[start:end+1])
                 if isinstance(parsed, dict):
+                    # Inject context so it can be displayed in frontend
+                    parsed["context"] = context
                     return parsed
             except Exception:
                 pass
@@ -183,7 +198,8 @@ def generate_info_from_llm_structured(text: str) -> dict:
         "summary": [raw],
         "key_terms": [],
         "unit_conversions": [],
-        "clarifying_question": ""
+        "clarifying_question": "",
+        "context": context
     }
 
 
