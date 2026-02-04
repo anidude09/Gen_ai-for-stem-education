@@ -111,13 +111,7 @@ def _check_internet(timeout: float = 3.0) -> CheckResult:
 
 
 def _start_backend_in_thread():
-    """
-    Start the FastAPI backend (uvicorn) in a daemon thread.
-
-    We run uvicorn programmatically and adjust sys.path so that importing
-    backend.app works regardless of the current working directory. This
-    helps when packaging into a single EXE.
-    """
+ 
 
     def _run():
         try:
@@ -149,7 +143,7 @@ def _start_backend_in_thread():
 def _open_frontend_in_browser(delay: float = 2.0):
     """
     Open the frontend in the default browser after a short delay.
-    This assumes the React app is ultimately served via the backend.
+    
     """
 
     def _run():

@@ -2,7 +2,6 @@
 import os
 import sys
 
-# Ensure backend can be imported
 sys.path.append(os.path.join(os.path.dirname(__file__)))
 
 from services.rag_service import rag_service
@@ -14,7 +13,7 @@ def inspect_chunks():
         return
 
     
-    query = "Beam"
+    query = "Shed roof"
    
     results = rag_service.vector_store.similarity_search(query, k=3)
     

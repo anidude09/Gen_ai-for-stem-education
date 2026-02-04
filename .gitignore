@@ -16,6 +16,17 @@ backend/routes/__pycache__/
 # RAG Data
 backend/chroma_db/
 
+# Bulk extraction tool (testing only)
+bulked_extract/input_images/
+bulked_extract/output/
+bulked_extract/temp_converted/
+
+experiments/
+
+RAG_TECHNICAL_OVERVIEW.html
+research_paper_content.txt
+
+
 stem/
 
 venv
@@ -24,7 +35,8 @@ venv
 
 *.pyc
 
-
+RSMeans_Illustrated_Construction_Dictionary/
+docs/
 
 # Logs
 
