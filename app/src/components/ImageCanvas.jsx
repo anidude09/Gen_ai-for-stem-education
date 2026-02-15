@@ -37,11 +37,13 @@ function ImageCanvas({
   sessionId,
   onNavigateToPage,
   zoom,
+  highlightCircleText,
+  hideControls,
 }) {
   const wrapperRef = useRef(null);
   // Zoom is now managed by parent (App.jsx) or context, passed in as prop
   // const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
-  
+
   const [isDetecting, setIsDetecting] = useState(false);
   const [selection, setSelection] = useState(null);
   const [isSelecting, setIsSelecting] = useState(false);
@@ -49,9 +51,9 @@ function ImageCanvas({
 
   const handleImageLoad = async () => {
     if (!imgRef.current) return;
-    
+
     // ... existing code ...
-    
+
     const info = {
       naturalWidth: imgRef.current.naturalWidth,
       naturalHeight: imgRef.current.naturalHeight,
@@ -63,7 +65,7 @@ function ImageCanvas({
     setImageInfo(info);
     setLoaded(true);
   };
-  
+
   // ... (rest of detection logic remains same) ...
 
   const runDetection = async () => {
@@ -294,25 +296,27 @@ function ImageCanvas({
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       {/* ZoomControls removed from here, now in App header */}
 
-      <div style={{ margin: "8px 0" }}>
-        <button
-          onClick={runDetection}
-          disabled={!imageInfo || isDetecting}
-          className="detect-button"
-          aria-busy={isDetecting ? "true" : "false"}
-        >
-          {isDetecting ? "Detecting..." : "Detect"}
-        </button>
-        <button
-          onClick={runRegionDetection}
-          disabled={!imageInfo || !selection || isDetecting}
-          className="detect-button"
-          style={{ marginLeft: "8px" }}
-          aria-busy={isDetecting ? "true" : "false"}
-        >
-          {isDetecting ? "Detecting..." : "Detect in selection"}
-        </button>
-      </div>
+      {!hideControls && (
+        <div style={{ margin: "8px 0" }}>
+          <button
+            onClick={runDetection}
+            disabled={!imageInfo || isDetecting}
+            className="detect-button"
+            aria-busy={isDetecting ? "true" : "false"}
+          >
+            {isDetecting ? "Detecting..." : "Detect"}
+          </button>
+          <button
+            onClick={runRegionDetection}
+            disabled={!imageInfo || !selection || isDetecting}
+            className="detect-button"
+            style={{ marginLeft: "8px" }}
+            aria-busy={isDetecting ? "true" : "false"}
+          >
+            {isDetecting ? "Detecting..." : "Detect in selection"}
+          </button>
+        </div>
+      )}
 
       {isDetecting && (
         <div className="loading-bar" role="status" aria-label="Detecting">
@@ -323,7 +327,7 @@ function ImageCanvas({
       <div
         className="image-container"
         style={{ position: "relative", display: "inline-block", overflow: "auto" }}
-        // onWheel handled by parent if needed, or can be re-added here if we pass handleWheel prop
+      // onWheel handled by parent if needed, or can be re-added here if we pass handleWheel prop
       >
         <div
           ref={wrapperRef}
@@ -361,6 +365,7 @@ function ImageCanvas({
                 texts={texts}
                 selection={selection}
                 onShapeClick={handleShapeSelected}
+                highlightCircleText={highlightCircleText}
               />
               {selectedShape && (
                 <Popup

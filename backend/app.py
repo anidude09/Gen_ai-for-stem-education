@@ -44,6 +44,16 @@ if os.path.isdir(_FRONTEND_DIST_DIR):
     if os.path.isdir(images_dist):
         app.mount("/images", StaticFiles(directory=images_dist), name="images")
 
+# Serve dictionary images from extracted terms
+_DICT_IMAGES_DIR = os.path.normpath(os.path.join(_BACKEND_DIR, "..", "data", "RSMeans_Illustrated_Construction_Dictionary", "images"))
+if os.path.isdir(_DICT_IMAGES_DIR):
+    app.mount(
+        "/dict-images",
+        StaticFiles(directory=_DICT_IMAGES_DIR),
+        name="dict-images",
+    )
+    print(f"[APP] Serving dictionary images from {_DICT_IMAGES_DIR}")
+
 
 @app.get("/", include_in_schema=False)
 def serve_frontend():

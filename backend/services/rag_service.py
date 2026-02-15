@@ -1,6 +1,7 @@
 import os
 import shutil
-from typing import List
+import json
+from typing import List, Optional, Dict, Any
 
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -15,10 +16,42 @@ PROJECT_ROOT = os.path.dirname(BACKEND_DIR)
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 CHROMA_DB_DIR = os.path.join(BACKEND_DIR, "chroma_db")
 
+# Noah's extracted terms JSON
+TERMS_JSON_PATH = os.path.join(DATA_DIR, "RSMeans_Illustrated_Construction_Dictionary/terms.json")
+DICTIONARY_BASE_DIR = os.path.join(DATA_DIR, "RSMeans_Illustrated_Construction_Dictionary")
+
 # Constants
 CHUNK_SIZE = 300
 CHUNK_OVERLAP = 50
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+
+
+def load_terms_lookup() -> Dict[str, Dict[str, Any]]:
+    """
+    Load terms.json into a lookup dictionary.
+    Keys are uppercase terms for case-insensitive matching.
+    """
+    terms_lookup = {}
+    if os.path.exists(TERMS_JSON_PATH):
+        try:
+            with open(TERMS_JSON_PATH, 'r', encoding='utf-8') as f:
+                terms_data = json.load(f)
+                for entry in terms_data:
+                    term_key = entry.get("term", "").strip().upper()
+                    if term_key:
+                        # Store with uppercase key for case-insensitive lookup
+                        terms_lookup[term_key] = entry
+            print(f"[RAG] Loaded {len(terms_lookup)} terms from JSON dictionary")
+        except Exception as e:
+            print(f"[RAG] Warning: Could not load terms.json: {e}")
+    else:
+        print(f"[RAG] Warning: Terms JSON not found at {TERMS_JSON_PATH}")
+    return terms_lookup
+
+
+# Load terms at module import time (singleton pattern)
+TERMS_LOOKUP = load_terms_lookup()
+
 
 class RAGService:
     def __init__(self):
@@ -78,11 +111,24 @@ class RAGService:
     def get_context(self, query: str, k: int = 3) -> str:
         """
         Retrieve relevant context for a query.
+        First tries exact match in JSON dictionary, then falls back to vector search.
         """
+        term_upper = query.strip().upper()
+        
+        # 1. Try exact JSON match first (fast O(1) lookup)
+        if term_upper in TERMS_LOOKUP:
+            entry = TERMS_LOOKUP[term_upper]
+            page = entry.get("page", "N/A")
+            definition = entry.get("definition", "")
+            print(f"[RAG] JSON match for: {query} (Page {page})")
+            return f"--- Source: RSMeans Dictionary (Page {page}) ---\n{definition}"
+        
+        # 2. Fallback to vector search
         if not self.vector_store:
+            print(f"[RAG] No vector store and no JSON match for: {query}")
             return ""
 
-        print(f"[RAG] Searching for: {query}")
+        print(f"[RAG] Fallback to vector search for: {query}")
         results = self.vector_store.similarity_search(query, k=k)
         
         # Concatenate content
@@ -94,5 +140,40 @@ class RAGService:
             
         return "\n\n".join(context_parts)
 
+    def get_term_entry(self, query: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the full term entry from JSON dictionary if it exists.
+        Returns None if not found.
+        """
+        term_upper = query.strip().upper()
+        return TERMS_LOOKUP.get(term_upper)
+
+    def get_term_image(self, query: str) -> Optional[str]:
+        """
+        Get the image path for a term if it exists.
+        Returns the relative path from the dictionary folder, or None if no image.
+        """
+        entry = self.get_term_entry(query)
+        if entry and entry.get("image"):
+            path = entry.get("image")
+            print(f"[RAG] Found image for '{query}': {path}")
+            return path
+        print(f"[RAG] No image found for '{query}'")
+        return None
+
+    def get_term_image_absolute(self, query: str) -> Optional[str]:
+        """
+        Get the absolute image path for a term if it exists.
+        Returns None if no image.
+        """
+        relative_path = self.get_term_image(query)
+        if relative_path:
+            absolute_path = os.path.join(DICTIONARY_BASE_DIR, relative_path)
+            if os.path.exists(absolute_path):
+                return absolute_path
+        return None
+
+
 # Singleton instance
 rag_service = RAGService()
+

@@ -4,6 +4,7 @@ import ImageUploader from "./components/ImageUploader";
 import ImageCanvas from "./components/ImageCanvas";
 import LoginForm from "./components/Loginform";
 import Page from "./components/Page";
+import ChatBox from "./components/ChatBox";
 import useLogout from "./hooks/useLogout";
 import useautoLogout from "./hooks/useautoLogout";
 import useZoom from "./hooks/useZoom";
@@ -47,7 +48,7 @@ function MainPage() {
   const handleLogout = useLogout(sessionId, setUser, setSessionId, setImageUrl);
 
   // Auto logout (inactivity + tab close)
-  useautoLogout(sessionId, handleLogout,  50 * 10 * 1000);
+  useautoLogout(sessionId, handleLogout, 50 * 10 * 1000);
 
   // Zoom state - now managed at App level to put controls in header
   const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
@@ -98,10 +99,9 @@ function MainPage() {
 
         const data = await resp.json();
         const rawCircles = data.circles || [];
-        const rawTexts = data.texts || [];
 
         setDetailRawCircles(rawCircles);
-        setDetailRawTexts(rawTexts);
+        setDetailRawTexts([]);
 
         const scaledCircles = rawCircles.map((c) => ({
           ...c,
@@ -110,28 +110,18 @@ function MainPage() {
           r: c.r * Math.min(detailImageInfo.scaleX, detailImageInfo.scaleY),
         }));
 
-        const scaledTexts = rawTexts.map((t) => ({
-          ...t,
-          x1: t.x1 * detailImageInfo.scaleX,
-          y1: t.y1 * detailImageInfo.scaleY,
-          x2: t.x2 * detailImageInfo.scaleX,
-          y2: t.y2 * detailImageInfo.scaleY,
-        }));
-
-        setDetailCircles(scaledCircles);
-        setDetailTexts(scaledTexts);
-
-        // Auto-select the first circle whose circle_text matches
+        // Only keep circles matching the target circle_text
         const targetLower = detailTargetCircleText.trim().toLowerCase();
-        const matched = scaledCircles.find(
+        const matched = scaledCircles.filter(
           (c) =>
             c.circle_text &&
             typeof c.circle_text === "string" &&
             c.circle_text.trim().toLowerCase() === targetLower
         );
-        if (matched) {
-          setDetailSelectedShape(matched);
-        }
+
+        // Only show the matching circle(s), not all detected shapes
+        setDetailCircles(matched);
+        setDetailTexts([]);
       } catch (err) {
         console.error("Detail detection error:", err);
         setDetailError(`Failed to detect on detail page: ${err.message}`);
@@ -145,7 +135,7 @@ function MainPage() {
     <div className="container">
       <header className="app-header" style={{ justifyContent: "flex-start", gap: "20px" }}>
         <h1 className="heading" style={{ textAlign: "left", margin: 0 }}>Generative AI for STEM Education</h1>
-        
+
         {user && imageUrl && (
           <div className="zoom-controls-header">
             <button onClick={zoomOut} title="Zoom out" className="zoom-btn-header">−</button>
@@ -166,24 +156,24 @@ function MainPage() {
       <div className="app-body">
         <aside className="sidebar">
           <h2 className="sidebar-title">Workspace</h2>
-          
-          <div 
+
+          <div
             className={`sidebar-item ${activeView === "main" ? "active" : ""}`}
             onClick={() => imageUrl && setActiveView("main")}
             style={{ opacity: imageUrl ? 1 : 0.5, pointerEvents: imageUrl ? "auto" : "none" }}
           >
             <span className="sidebar-item-title">Main Sheet</span>
             {imageInfo ? (
-               <span className="sidebar-item-details">
-                 {imageInfo.naturalWidth} x {imageInfo.naturalHeight} px
-               </span>
+              <span className="sidebar-item-details">
+                {imageInfo.naturalWidth} x {imageInfo.naturalHeight} px
+              </span>
             ) : (
-               <span className="sidebar-item-details">No image loaded</span>
+              <span className="sidebar-item-details">No image loaded</span>
             )}
           </div>
 
           {detailImageUrl && (
-            <div 
+            <div
               className={`sidebar-item ${activeView === "detail" ? "active" : ""}`}
               onClick={() => setActiveView("detail")}
             >
@@ -201,33 +191,38 @@ function MainPage() {
           {/* Upload Button - Moved to Sidebar */}
           {user && (
             <div style={{ marginTop: "12px" }}>
-               <ImageUploader
-                  setImageUrl={setImageUrl}
-                  resetStates={() => {
-                    setLoaded(false);
-                    setError(null);
-                    setRawCircles([]);
-                    setRawTexts([]);
-                    setCircles([]);
-                    setTexts([]);
-                    setSelectedShape(null);
-                    setImageInfo(null);
-                  }}
-                />
+              <ImageUploader
+                setImageUrl={setImageUrl}
+                resetStates={() => {
+                  setLoaded(false);
+                  setError(null);
+                  setRawCircles([]);
+                  setRawTexts([]);
+                  setCircles([]);
+                  setTexts([]);
+                  setSelectedShape(null);
+                  setImageInfo(null);
+                }}
+              />
             </div>
           )}
 
           {/* Instructions - Moved to sidebar bottom */}
           {activeView === "main" && imageUrl && (
             <div className="instructions-panel sidebar-instructions">
-                <h3>How to Use</h3>
-                <ol>
-                    <li><strong>Detect</strong> to find text/callouts.</li>
-                    <li><strong>Select region</strong> for focused search.</li>
-                    <li>Click text for AI explanations.</li>
-                    <li>Click red circles to navigate.</li>
-                </ol>
+              <h3>How to Use</h3>
+              <ol>
+                <li><strong>Detect</strong> to find text/callouts.</li>
+                <li><strong>Select region</strong> for focused search.</li>
+                <li>Click text for AI explanations.</li>
+                <li>Click red circles to navigate.</li>
+              </ol>
             </div>
+          )}
+
+          {/* ChatBox - Term search at bottom of sidebar */}
+          {user && (
+            <ChatBox sessionId={sessionId} />
           )}
         </aside>
 
@@ -288,6 +283,8 @@ function MainPage() {
                     onNavigateToPage={handleNavigateToPage}
                     zoom={zoom}
                     handleWheel={handleWheel}
+                    highlightCircleText={detailTargetCircleText}
+                    hideControls
                   />
                   {detailError && <div className="error">{detailError}</div>}
                 </div>

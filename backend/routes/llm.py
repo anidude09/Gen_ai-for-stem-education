@@ -174,11 +174,30 @@ def generate_info_from_llm_structured(text: str) -> dict:
     )
 
     raw = completion.choices[0].message.content.strip()
+    
+    # Get image path if available
+    image_path = rag_service.get_term_image(text)
+    image_url = None
+    if image_path:
+        # Convert relative path to URL (remove 'images/' prefix since it's already in the mount path)
+        # e.g., "images/page_15/ABCextinguisher.png" -> "/dict-images/page_15/ABCextinguisher.png"
+        if image_path.startswith("images/"):
+            image_url = "/dict-images/" + image_path[7:]  # Remove "images/" prefix
+        else:
+            image_url = "/dict-images/" + image_path
+            
+    print(f"[LLM] Image Path for frontend: {image_url}")
+    
     try:
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
             # Inject context so it can be displayed in frontend
             parsed["context"] = context
+            # Inject image URL if available
+            if image_url:
+                parsed["dict_image"] = image_url
+            
+            print(f"[LLM] Final JSON keys: {list(parsed.keys())}")
             return parsed
     except Exception:
         
@@ -190,17 +209,23 @@ def generate_info_from_llm_structured(text: str) -> dict:
                 if isinstance(parsed, dict):
                     # Inject context so it can be displayed in frontend
                     parsed["context"] = context
+                    # Inject image URL if available
+                    if image_url:
+                        parsed["dict_image"] = image_url
                     return parsed
             except Exception:
                 pass
     # Fallback if the model didn't return valid JSON
-    return {
+    result = {
         "summary": [raw],
         "key_terms": [],
         "unit_conversions": [],
         "clarifying_question": "",
         "context": context
     }
+    if image_url:
+        result["dict_image"] = image_url
+    return result
 
 
 @router.post("/generate_info_structured")

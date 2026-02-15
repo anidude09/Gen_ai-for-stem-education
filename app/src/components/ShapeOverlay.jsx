@@ -9,7 +9,7 @@
 
 import React from "react";
 
-function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick }) {
+function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, highlightCircleText }) {
   const handleShapeClick = (e, shape) => {
     e.preventDefault();
     e.stopPropagation();
@@ -29,6 +29,15 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick }) {
     }
   };
 
+  // Determine if a circle is the highlighted target
+  const isHighlighted = (c) => {
+    if (!highlightCircleText || !c.circle_text) return false;
+    return (
+      c.circle_text.trim().toLowerCase() ===
+      highlightCircleText.trim().toLowerCase()
+    );
+  };
+
   return (
     <svg
       className="overlay-svg"
@@ -44,19 +53,37 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick }) {
         transformOrigin: "0 0",
       }}
     >
-      {circles.map((c) => (
+      {/* Pulsing highlight ring behind the target circle */}
+      {circles.filter(isHighlighted).map((c) => (
         <circle
-          key={`circle-${c.id}`}
+          key={`highlight-${c.id}`}
           cx={c.x}
           cy={c.y}
-          r={c.r}
-          fill="rgba(255, 0, 0, 0.22)"
-          stroke="red"
-          strokeWidth="2"
-          onClick={(e) => handleShapeClick(e, c)}
-          style={{ cursor: "pointer", pointerEvents: "all" }}
+          r={c.r + 6}
+          fill="none"
+          stroke="#3b82f6"
+          strokeWidth="4"
+          className="circle-highlight-pulse"
+          style={{ pointerEvents: "none" }}
         />
       ))}
+
+      {circles.map((c) => {
+        const hl = isHighlighted(c);
+        return (
+          <circle
+            key={`circle-${c.id}`}
+            cx={c.x}
+            cy={c.y}
+            r={c.r}
+            fill={hl ? "rgba(59, 130, 246, 0.28)" : "rgba(255, 0, 0, 0.22)"}
+            stroke={hl ? "#2563eb" : "red"}
+            strokeWidth={hl ? "3" : "2"}
+            onClick={(e) => handleShapeClick(e, c)}
+            style={{ cursor: "pointer", pointerEvents: "all" }}
+          />
+        );
+      })}
 
       {texts.map((t) => (
         <rect
