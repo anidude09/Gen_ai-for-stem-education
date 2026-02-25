@@ -39,6 +39,7 @@ function ImageCanvas({
   zoom,
   highlightCircleText,
   hideControls,
+  onVlmDetect,           // NEW: fires GPT-4o Vision analysis in parallel
 }) {
   const wrapperRef = useRef(null);
   // Zoom is now managed by parent (App.jsx) or context, passed in as prop
@@ -79,6 +80,14 @@ function ImageCanvas({
       const blob = await fetch(imageUrl).then((r) => r.blob());
       const formData = new FormData();
       formData.append("file", blob, "image.png");
+
+      // Fire VLM analysis in parallel — does NOT block the CV pipeline.
+      // The VLM result will update the right panel whenever GPT-4o responds.
+      if (onVlmDetect) {
+        onVlmDetect(blob, null).catch((err) =>
+          console.warn("VLM fire-and-forget error:", err)
+        );
+      }
 
       // Log the user explicitly starting a full-image detection
       logActivity({
@@ -178,6 +187,13 @@ function ImageCanvas({
       formData.append("y", String(y));
       formData.append("w", String(w));
       formData.append("h", String(h));
+
+      // Fire VLM region analysis in parallel
+      if (onVlmDetect) {
+        onVlmDetect(blob, { x, y, w, h }).catch((err) =>
+          console.warn("VLM region fire-and-forget error:", err)
+        );
+      }
 
       const res = await fetch("http://localhost:8001/detect/region-detect", {
         method: "POST",

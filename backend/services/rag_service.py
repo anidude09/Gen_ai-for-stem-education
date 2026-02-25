@@ -1,6 +1,7 @@
 import os
 import shutil
 import json
+import functools
 from typing import List, Optional, Dict, Any
 
 from langchain_community.document_loaders import PyPDFDirectoryLoader
@@ -108,13 +109,21 @@ class RAGService:
         self.vector_store.persist()
         print(f"[RAG] Ingestion complete. Saved to {CHROMA_DB_DIR}")
 
+    # ── Performance: in-memory cache for vector-search results ────────────────
+    # Exact-match hits are O(1) dict lookups and very fast already; we cache
+    # vector-search results (which require embedding + ChromaDB round-trip) in a
+    # simple bounded dict.  Max 256 entries; oldest entry evicted when full.
+    _VECTOR_CACHE_MAX = 256
+    _vector_cache: Dict[str, str] = {}
+
     def get_context(self, query: str, k: int = 3) -> str:
         """
         Retrieve relevant context for a query.
         First tries exact match in JSON dictionary, then falls back to vector search.
+        Results are cached in memory to avoid repeated embedding/DB calls.
         """
         term_upper = query.strip().upper()
-        
+
         # 1. Try exact JSON match first (fast O(1) lookup)
         if term_upper in TERMS_LOOKUP:
             entry = TERMS_LOOKUP[term_upper]
@@ -122,23 +131,36 @@ class RAGService:
             definition = entry.get("definition", "")
             print(f"[RAG] JSON match for: {query} (Page {page})")
             return f"--- Source: RSMeans Dictionary (Page {page}) ---\n{definition}"
-        
-        # 2. Fallback to vector search
+
+        # 2. Check vector-search cache
+        cache_key = f"{term_upper}|k={k}"
+        if cache_key in self._vector_cache:
+            print(f"[RAG] Vector cache hit for: {query}")
+            return self._vector_cache[cache_key]
+
+        # 3. Fallback to vector search
         if not self.vector_store:
             print(f"[RAG] No vector store and no JSON match for: {query}")
             return ""
 
         print(f"[RAG] Fallback to vector search for: {query}")
         results = self.vector_store.similarity_search(query, k=k)
-        
-        # Concatenate content
+
         context_parts = []
-        for i, doc in enumerate(results):
+        for doc in results:
             source = os.path.basename(doc.metadata.get("source", "unknown"))
             page = doc.metadata.get("page", 0)
             context_parts.append(f"--- Source: {source} (Page {page}) ---\n{doc.page_content}")
-            
-        return "\n\n".join(context_parts)
+
+        context = "\n\n".join(context_parts)
+
+        # Store in cache; evict oldest entry if full
+        if len(self._vector_cache) >= self._VECTOR_CACHE_MAX:
+            oldest_key = next(iter(self._vector_cache))
+            del self._vector_cache[oldest_key]
+        self._vector_cache[cache_key] = context
+
+        return context
 
     def get_term_entry(self, query: str) -> Optional[Dict[str, Any]]:
         """

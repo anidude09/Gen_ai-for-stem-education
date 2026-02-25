@@ -5,6 +5,7 @@ import ImageCanvas from "./components/ImageCanvas";
 import LoginForm from "./components/Loginform";
 import Page from "./components/Page";
 import ChatBox from "./components/ChatBox";
+import VLMPanel from "./components/VLMPanel";
 import useLogout from "./hooks/useLogout";
 import useautoLogout from "./hooks/useautoLogout";
 import useZoom from "./hooks/useZoom";
@@ -41,6 +42,11 @@ function MainPage() {
   const [user, setUser] = useState(null);
   const [sessionId, setSessionId] = useState(null);
 
+  // VLM (GPT-4o Vision) side-panel state
+  const [vlmResult, setVlmResult] = useState(null);
+  const [vlmLoading, setVlmLoading] = useState(false);
+  const [vlmMode, setVlmMode] = useState(null); // "full" | "region"
+
   const imgRef = useRef(null);
   const detailImgRef = useRef(null);
 
@@ -52,6 +58,53 @@ function MainPage() {
 
   // Zoom state - now managed at App level to put controls in header
   const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
+
+  /**
+   * handleVlmDetect — called by ImageCanvas when the user clicks Detect or
+   * Detect in Selection.  Fires in parallel with the CV pipeline so the canvas
+   * overlays appear promptly while GPT-4o thinks in the background.
+   *
+   * @param {Blob}  imageBlob  — the raw image file blob
+   * @param {Object|null} cropParams — {x, y, w, h} in natural image pixels, or null for full image
+   */
+  const handleVlmDetect = async (imageBlob, cropParams = null) => {
+    setVlmResult(null);
+    setVlmLoading(true);
+    setVlmMode(cropParams ? "region" : "full");
+
+    const formData = new FormData();
+    formData.append("file", imageBlob, "image.png");
+    if (sessionId) formData.append("session_id", sessionId);
+    if (cropParams) {
+      formData.append("x", String(Math.round(cropParams.x)));
+      formData.append("y", String(Math.round(cropParams.y)));
+      formData.append("w", String(Math.round(cropParams.w)));
+      formData.append("h", String(Math.round(cropParams.h)));
+    }
+
+    try {
+      const res = await fetch("http://localhost:8001/vlm/analyze", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error(`VLM HTTP ${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      setVlmResult(data);
+    } catch (err) {
+      console.error("VLM analysis error:", err);
+      setVlmResult({
+        mode: cropParams ? "region" : "full",
+        drawing_type: "Error",
+        summary: [`VLM analysis failed: ${err.message}`],
+        text_labels: [],
+        detail_circles: [],
+        symbols: [],
+        student_tip: "",
+      });
+    } finally {
+      setVlmLoading(false);
+    }
+  };
 
   // Handle navigation from a circle to a specific page (e.g., A5.1)
   const handleNavigateToPage = (pageImageUrl, pageNumber, circleText) => {
@@ -153,7 +206,7 @@ function MainPage() {
         )}
       </header>
 
-      <div className="app-body">
+      <div className="app-body" style={{ display: "grid", gridTemplateColumns: "220px 1fr 300px", gridTemplateRows: "1fr", overflow: "hidden" }}>
         <aside className="sidebar">
           <h2 className="sidebar-title">Workspace</h2>
 
@@ -256,6 +309,7 @@ function MainPage() {
                     onNavigateToPage={handleNavigateToPage}
                     zoom={zoom}
                     handleWheel={handleWheel}
+                    onVlmDetect={handleVlmDetect}
                   />
                 </div>
               )}
@@ -292,6 +346,16 @@ function MainPage() {
             </>
           )}
         </main>
+
+        {/* VLM right panel — always shown when user is logged in */}
+        {user && (
+          <VLMPanel
+            vlmResult={vlmResult}
+            vlmLoading={vlmLoading}
+            vlmMode={vlmMode}
+          />
+        )}
+
       </div>
     </div>
   );

@@ -52,19 +52,16 @@ _LOG_FIELDNAMES = [
 ]
 
 
-def _get_log_path() -> Path:
-    """
-    Resolve the path to the CSV log file.
-    Placed in the backend directory as `activity_log.csv`.
-    """
-
-    backend_root = Path(__file__).resolve().parent.parent
-    return backend_root / "activity_log.csv"
+# ── Performance: resolve path and create file once at module import ─────────
+# Resolving Path(__file__) and checking path.exists() on every request adds
+# unnecessary syscall overhead.  We do it once here and cache the result.
+_LOG_PATH: Path = Path(__file__).resolve().parent.parent / "activity_log.csv"
 
 
 def _ensure_log_file(path: Path) -> None:
     """
     Ensure the CSV log file exists and has a header row.
+    Called once at module import.
     """
 
     if not path.exists():
@@ -74,15 +71,16 @@ def _ensure_log_file(path: Path) -> None:
             writer.writeheader()
 
 
+# Initialise once at startup
+_ensure_log_file(_LOG_PATH)
+
+
 @router.post("/activity/log", tags=["Activity"])
 async def log_activity(event: ActivityEvent) -> dict:
     """
     Append a single activity event to the CSV log.
     Intended to be called from the frontend for important user actions.
     """
-
-    log_path = _get_log_path()
-    _ensure_log_file(log_path)
 
     timestamp = event.timestamp_utc or datetime.utcnow()
 
@@ -95,7 +93,7 @@ async def log_activity(event: ActivityEvent) -> dict:
         "event_data_json": json.dumps(event.event_data or {}, ensure_ascii=False),
     }
 
-    with log_path.open("a", newline="", encoding="utf-8") as f:
+    with _LOG_PATH.open("a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=_LOG_FIELDNAMES)
         writer.writerow(row)
 

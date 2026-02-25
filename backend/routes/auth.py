@@ -11,35 +11,45 @@ from fastapi import APIRouter, Form
 from pydantic import BaseModel
 from datetime import datetime
 import sqlite3
+import threading
 import uuid
 
 # Create a FastAPI router instance for handling authentication routes
 router = APIRouter()
 
 
+# ── Performance: thread-local SQLite connection ────────────────────────────────
+# Opening and closing a new sqlite3 connection on every request adds measurable
+# latency (OS file open syscall + page-cache warm-up).  A thread-local
+# connection is opened once per worker thread and reused for the lifetime of
+# that thread, while remaining thread-safe.
+_local = threading.local()
+
+
+def _get_db_conn() -> sqlite3.Connection:
+    """Return the per-thread SQLite connection, creating it if needed."""
+    if not getattr(_local, "conn", None):
+        _local.conn = sqlite3.connect("sessions.db", check_same_thread=False)
+        # Ensure the schema exists on first use in this thread
+        _local.conn.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                email TEXT,
+                start_time TEXT,
+                end_time TEXT
+            )
+        """)
+        _local.conn.commit()
+    return _local.conn
+
+
 def init_db():
     """
-    Initializes the SQLite database and creates the `sessions` table if it does not already exist.
-    The `sessions` table stores:
-        - id (str): Unique identifier for the session (UUID)
-        - name (str): Name of the user
-        - email (str): Email of the user
-        - start_time (str): ISO formatted string marking when the session started
-        - end_time (str): ISO formatted string marking when the session ended (nullable)
+    Initializes the SQLite database on the main thread at startup.
     """
-    conn = sqlite3.connect("sessions.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id TEXT PRIMARY KEY,
-            name TEXT,
-            email TEXT,
-            start_time TEXT,
-            end_time TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
+    conn = _get_db_conn()
+    _ = conn  # triggers schema creation via _get_db_conn
 
 
 # Initialize the database on module load
@@ -59,26 +69,17 @@ class LogoutRequest(BaseModel):
 async def login(name: str = Form(...), email: str = Form(...)):
     """
     Handles user login.
-
-    - Accepts user `name` and `email` as form data.
-    - Generates a unique session ID using UUID.
-    - Captures the session's start time in UTC (ISO format).
-    - Stores the session details in the SQLite database (`sessions` table).
-    - Returns the generated session ID and the session start time.
-
-    This function essentially begins a new user session.
+    Creates a new session and stores it in the shared SQLite database.
     """
     session_id = str(uuid.uuid4())
     start_time = datetime.utcnow().isoformat()
 
-    conn = sqlite3.connect("sessions.db")
-    cursor = conn.cursor()
-    cursor.execute(
+    conn = _get_db_conn()
+    conn.execute(
         "INSERT INTO sessions (id, name, email, start_time, end_time) VALUES (?, ?, ?, ?, ?)",
         (session_id, name, email, start_time, None),
     )
     conn.commit()
-    conn.close()
 
     return {"session_id": session_id, "start_time": start_time}
 
@@ -87,23 +88,15 @@ async def login(name: str = Form(...), email: str = Form(...)):
 async def logout(request: LogoutRequest):
     """
     Handles user logout.
-
-    - Accepts a `LogoutRequest` object containing the session ID.
-    - Records the current UTC time as the session's end time (ISO format).
-    - Updates the corresponding session record in the database by setting its `end_time`.
-    - Returns a confirmation message along with the recorded end time.
-
-    This function effectively ends a user session.
+    Records the session end time in the database.
     """
     end_time = datetime.utcnow().isoformat()
 
-    conn = sqlite3.connect("sessions.db")
-    cursor = conn.cursor()
-    cursor.execute(
+    conn = _get_db_conn()
+    conn.execute(
         "UPDATE sessions SET end_time = ? WHERE id = ?",
         (end_time, request.session_id),
     )
     conn.commit()
-    conn.close()
 
     return {"message": "Session ended", "end_time": end_time}

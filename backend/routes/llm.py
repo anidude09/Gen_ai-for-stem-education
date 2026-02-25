@@ -41,25 +41,22 @@ class LLMRequest(BaseModel):
 
 def generate_info_from_llm(text: str) -> str:
     """
-    Sends the given text to the Groq LLM (LLaMA-3.1-8b-instant) and requests a
+    Sends the given text to the Groq LLM (LLaMA-3.3-70b-versatile) and requests a
     concise, domain-aware explanation (construction) with light guardrails.
 
-    Steps:
-    1. Create a chat completion request with the model.
-    2. Provide a system persona and explicit rules to improve accuracy.
-    3. Prompt the LLM to explain the input text in 2–4 concise bullets (60–120 words).
-    3. Extract and return the model's response as a string.
-
-    Args:
-        text (str): The text to be explained.
-
-    Returns:
-        str: Concise explanation of the input text.
+    Optimisation: a single rag_service.get_term_entry() call is used to derive
+    both the RAG context string (instead of get_context) so the TERMS_LOOKUP
+    dict is only touched once per request.
     """
-    
-    # RAG Retrieval
-    context = rag_service.get_context(text)
-    
+    # Single lookup — derive context from it directly
+    term_entry = rag_service.get_term_entry(text)
+    if term_entry:
+        page = term_entry.get("page", "N/A")
+        definition = term_entry.get("definition", "")
+        context = f"--- Source: RSMeans Dictionary (Page {page}) ---\n{definition}"
+    else:
+        context = rag_service.get_context(text)
+
     completion = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         temperature=0.2,
@@ -77,7 +74,7 @@ def generate_info_from_llm(text: str) -> str:
                     "4) If there is an equation, state what it calculates and define each variable present in the snippet.\n"
                     "5) If the snippet is a figure/table caption, explain what it shows and the practical implication.\n"
                     "6) If content is not about construction or lacks enough context, say so briefly and ask 1 clarifying question.\n"
-                    "7) Output 2–4 concise bullet points, total 60–120 words.\n\n"
+                    "7) Output 2\u20134 concise bullet points, total 60\u2013120 words.\n\n"
                     f"Additional Context from Construction Dictionary:\n{context}"
                 )
             },
@@ -111,14 +108,36 @@ def generate_info_from_llm_structured(text: str) -> dict:
     """
     Variant that requests a strict JSON response to support structured rendering.
 
+    Optimisation: a single rag_service.get_term_entry() call is used to derive
+    both context and image_path, eliminating the previous double lookup
+    (get_context + get_term_image each hit TERMS_LOOKUP separately).
+
     Returns a dict with keys:
       - summary: list[str]
       - key_terms: list[{"term": str, "definition": str}]
       - unit_conversions: list[{"original": str, "si": str}]
       - clarifying_question: str
     """
-    # RAG Retrieval
-    context = rag_service.get_context(text)
+    # Single dict lookup — derive both context and image_path from it
+    term_entry = rag_service.get_term_entry(text)
+    if term_entry:
+        page = term_entry.get("page", "N/A")
+        definition = term_entry.get("definition", "")
+        context = f"--- Source: RSMeans Dictionary (Page {page}) ---\n{definition}"
+        image_path = term_entry.get("image")
+    else:
+        context = rag_service.get_context(text)
+        image_path = None
+
+    # Build image URL if we have a path
+    image_url = None
+    if image_path:
+        if image_path.startswith("images/"):
+            image_url = "/dict-images/" + image_path[7:]
+        else:
+            image_url = "/dict-images/" + image_path
+
+    print(f"[LLM] Image Path for frontend: {image_url}")
 
     completion = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -174,19 +193,6 @@ def generate_info_from_llm_structured(text: str) -> dict:
     )
 
     raw = completion.choices[0].message.content.strip()
-    
-    # Get image path if available
-    image_path = rag_service.get_term_image(text)
-    image_url = None
-    if image_path:
-        # Convert relative path to URL (remove 'images/' prefix since it's already in the mount path)
-        # e.g., "images/page_15/ABCextinguisher.png" -> "/dict-images/page_15/ABCextinguisher.png"
-        if image_path.startswith("images/"):
-            image_url = "/dict-images/" + image_path[7:]  # Remove "images/" prefix
-        else:
-            image_url = "/dict-images/" + image_path
-            
-    print(f"[LLM] Image Path for frontend: {image_url}")
     
     try:
         parsed = json.loads(raw)

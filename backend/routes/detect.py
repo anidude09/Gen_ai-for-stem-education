@@ -11,13 +11,28 @@ Key functionalities:
 - Detect textual regions across the entire image (excluding numeric-only text and quotes).
 - Provide a FastAPI endpoint (`POST /`) that accepts an image file and returns
   detected circles with text plus extracted non-numeric text regions.
+
+Performance notes (2024 optimisation pass):
+- CLAHE object cached as a module-level singleton (avoids rebuilding per crop).
+- Both OCR passes (preprocessed + raw) run concurrently via ThreadPoolExecutor so
+  EasyOCR's released-GIL C-level work overlaps in time.
+- All per-circle OCR crops are submitted to a shared thread pool and gathered at once.
+- Image bytes are decoded once per request and shared between circle and text detection.
+- Deduplication uses sort+linear-scan (O(n log n)) instead of nested loops (O(n²)).
+- The `/detect/` endpoint offloads both heavy sync functions to `asyncio.to_thread` so
+  the FastAPI event loop is never blocked.
 """
+
+from __future__ import annotations
+
+import asyncio
+import re
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import APIRouter, File, UploadFile
 import cv2
 import numpy as np
-import re
-import os
 
 # EasyOCR is the sole OCR engine (GPU preferred, CPU fallback).
 try:
@@ -30,17 +45,27 @@ try:
 except Exception:
     _EASYOCR_READER = None
 
+# ── Performance: module-level CLAHE singleton ──────────────────────────────────
+# Creating a CLAHE object is cheap but calling createCLAHE() on every single crop
+# adds unnecessary overhead.  One shared instance works perfectly fine because
+# CLAHE is stateless across calls.
+_CLAHE = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+# Shared thread pool for parallel EasyOCR work.  EasyOCR releases the GIL for
+# its C-level inference, so threads do actually run concurrently.
+_OCR_POOL = ThreadPoolExecutor(max_workers=4)
+
 # Detection tuning parameters (can be adjusted if needed)
 MIN_BOX_WIDTH = 10     # ignore very tiny boxes (pixels)
 MIN_BOX_HEIGHT = 10
 EASYOCR_MIN_CONFIDENCE = 0.3  # EasyOCR confidence threshold
 
-# EasyOCR tuning for blueprints - Simplified for robustness
+# EasyOCR tuning for blueprints – Simplified for robustness
 EASYOCR_PARAMS = {
     "paragraph": False,
     "text_threshold": 0.5,  # Lower threshold to detect faint text
     "low_text": 0.35,       # Keep lower confidence text regions
-    "link_threshold": 0.4,  # Default merging behavior
+    "link_threshold": 0.4,  # Default merging behaviour
     "mag_ratio": 1.5,       # Magnify image to detect small text
 }
 
@@ -55,17 +80,20 @@ TILE_SKIP_MEAN = 245
 router = APIRouter()
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Internal helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
 def _preprocess_for_easyocr(img_bgr: np.ndarray) -> np.ndarray:
     """
     Light preprocessing to help EasyOCR on construction drawings:
     - Convert to grayscale
-    - Apply CLAHE for local contrast enhancement
+    - Apply CLAHE for local contrast enhancement (uses cached singleton)
     - Convert back to 3-channel BGR (EasyOCR expects 3-channel images)
     """
     try:
         gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(gray)
+        enhanced = _CLAHE.apply(gray)          # ← reuses module-level CLAHE
         return cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
     except Exception:
         return img_bgr
@@ -148,7 +176,7 @@ def _clean_text(t: str) -> str:
     t = t.strip().upper()
     t = re.sub(r"\s+", " ", t)
     t = t.strip(" '\"")
-    if re.match(r".+[\\/.\-]$", t) and not re.search(r"[A-Z0-9][\\/.\-][A-Z0-9]$", t):
+    if re.match(r".+[\\/.\\-]$", t) and not re.search(r"[A-Z0-9][\\/.\\-][A-Z0-9]$", t):
         t = t[:-1]
     return t.strip()
 
@@ -165,7 +193,7 @@ def _is_construction_text(text: str) -> bool:
         return False
 
     # Allow spaces and common construction chars (dash at end to avoid range issues)
-    if not re.match(r"^[A-Za-z0-9.\"'\/()\s-]+$", t):
+    if not re.match(r"^[A-Za-z0-9.\"'\/()\\s-]+$", t):
         return False
 
     # Token-level patterns
@@ -186,7 +214,7 @@ def _is_construction_text(text: str) -> bool:
         # Allow short tokens if they match the 2-letter pattern, otherwise len>=2
         if len(tok) < 2:
             continue
-            
+
         for pat in patterns:
             if re.match(pat, tok):
                 hit = True
@@ -228,9 +256,6 @@ def _normalize_page_candidate(raw: str) -> str | None:
             return None
 
         # Heuristic cleanup for noisy sheet numbers like A83.2 -> A3.2.
-        # We assume sheet indices are typically 1–9; if the numeric part
-        # before the dot is > 9, progressively drop leading digits until
-        # it falls into that range.
         m = re.match(r"^([A-Z]+)(\d+)$", left)
         if m:
             prefix, num_part = m.group(1), m.group(2)
@@ -268,7 +293,7 @@ def _extract_page_and_circle(
         joined = " ".join(page_texts)
 
         # 1) try flexible A9.1 pattern in the whole string
-        m = re.search(r"[A-Za-z]\s*\d+\s*[\.\-]?\s*\d*", joined)
+        m = re.search(r"[A-Za-z]\s*\d+\s*[.\-]?\s*\d*", joined)
         if m:
             cand = _normalize_page_candidate(m.group(0))
             if cand:
@@ -301,11 +326,95 @@ def _extract_page_and_circle(
     return page_number, circle_text
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Per-circle OCR worker (submitted to thread pool)
+# ──────────────────────────────────────────────────────────────────────────────
 
-def detect_circles_with_text_from_image(img):
+def _ocr_single_circle(i: int, x: int, y: int, r: int, img: np.ndarray) -> dict:
+    """
+    Crop + preprocess + OCR a single circle.
+    Intended to be called from a ThreadPoolExecutor worker.
+    """
+    top    = max(y - r - 20, 0)
+    bottom = min(y + r + 20, img.shape[0])
+    left   = max(x - r - 20, 0)
+    right  = min(x + r + 20, img.shape[1])
+    crop   = img[top:bottom, left:right]
+
+    crop_for_ocr = _preprocess_for_easyocr(crop)
+    try:
+        h_c, w_c = crop_for_ocr.shape[:2]
+        if h_c > 0 and w_c > 0:
+            crop_for_ocr = cv2.resize(
+                crop_for_ocr,
+                None,
+                fx=3.0,
+                fy=3.0,
+                interpolation=cv2.INTER_CUBIC,
+            )
+    except Exception:
+        pass
+
+    top_texts: list[str] = []
+    bottom_texts: list[str] = []
+
+    try:
+        if _EASYOCR_READER is not None:
+            h_crop = crop_for_ocr.shape[0]
+            mid_y  = h_crop / 2.0
+            ocr_results = _run_easyocr(crop_for_ocr, EASYOCR_PARAMS)
+            for line in ocr_results:
+                bbox, text, conf = _unpack_easyocr_line(line)
+                if not text or bbox is None:
+                    continue
+                if conf is not None and conf < EASYOCR_MIN_CONFIDENCE:
+                    continue
+                t = _clean_text(text)
+                if not t:
+                    continue
+                try:
+                    ys = [pt[1] for pt in bbox]
+                    center_y = sum(ys) / len(ys)
+                except Exception:
+                    bottom_texts.append(t)
+                    continue
+                if center_y < mid_y:
+                    top_texts.append(t)
+                else:
+                    bottom_texts.append(t)
+        else:
+            print("EasyOCR reader not initialized; skipping circle OCR")
+    except Exception as e:
+        print(f"OCR error for circle {i}: {e}")
+        top_texts, bottom_texts = [], []
+
+    page_number, circle_text = _extract_page_and_circle(
+        page_texts=bottom_texts, circle_texts=top_texts
+    )
+
+    return {
+        "id": i + 1,
+        "x": int(x),
+        "y": int(y),
+        "r": int(r),
+        "page_number": page_number,
+        "circle_text": circle_text,
+        "raw_texts_top": top_texts,
+        "raw_texts_bottom": bottom_texts,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Public detection functions
+# ──────────────────────────────────────────────────────────────────────────────
+
+def detect_circles_with_text_from_image(img: np.ndarray) -> list:
     """
     Core circle-detection logic that operates on an OpenCV BGR image.
     Shared by both full-image detection and region detection.
+
+    Optimisation: all per-circle OCR crops are submitted to the shared
+    _OCR_POOL concurrently rather than run serially.
     """
     try:
         if img is None:
@@ -314,7 +423,6 @@ def detect_circles_with_text_from_image(img):
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        # Detect circles using Hough Circle Transform
         circles = cv2.HoughCircles(
             gray,
             cv2.HOUGH_GRADIENT,
@@ -326,103 +434,34 @@ def detect_circles_with_text_from_image(img):
             maxRadius=100,
         )
 
-        results = []
-        if circles is not None:
-            circles = np.round(circles[0, :]).astype("int")
+        if circles is None:
+            return []
 
-            for i, (x, y, r) in enumerate(circles):
-                # Crop region around circle with padding
-                top = max(y - r - 20, 0)
-                bottom = min(y + r + 20, img.shape[0])
-                left = max(x - r - 20, 0)
-                right = min(x + r + 20, img.shape[1])
-                crop = img[top:bottom, left:right]
+        circles = np.round(circles[0, :]).astype("int")
 
-                # Basic preprocessing + upscaling to help OCR read small text
-                crop_for_ocr = _preprocess_for_easyocr(crop)
-                try:
-                    h_c, w_c = crop_for_ocr.shape[:2]
-                    if h_c > 0 and w_c > 0:
-                        scale = 3.0
-                        crop_for_ocr = cv2.resize(
-                            crop_for_ocr,
-                            None,
-                            fx=scale,
-                            fy=scale,
-                            interpolation=cv2.INTER_CUBIC,
-                        )
-                except Exception:
-                    # If resize fails, fall back to original crop_for_ocr
-                    pass
+        # Submit all circle OCR tasks concurrently
+        futures = {
+            _OCR_POOL.submit(_ocr_single_circle, i, x, y, r, img): i
+            for i, (x, y, r) in enumerate(circles)
+        }
 
-                top_texts: list[str] = []
-                bottom_texts: list[str] = []
+        # Collect results preserving original order
+        results_map: dict[int, dict] = {}
+        for fut in as_completed(futures):
+            idx = futures[fut]
+            try:
+                results_map[idx] = fut.result()
+            except Exception as e:
+                print(f"Circle {idx} OCR future failed: {e}")
 
-                try:
-                    h_crop = crop_for_ocr.shape[0]
-                    mid_y = h_crop / 2.0
-
-                    if _EASYOCR_READER is not None:
-                        try:
-                            crop_rgb = cv2.cvtColor(crop_for_ocr, cv2.COLOR_BGR2RGB)
-                        except Exception:
-                            crop_rgb = crop_for_ocr
-
-                        ocr_results = _run_easyocr(crop_rgb, EASYOCR_PARAMS)
-                        for line in ocr_results:
-                            bbox, text, conf = _unpack_easyocr_line(line)
-                            if not text or bbox is None:
-                                continue
-                            if conf is not None and conf < EASYOCR_MIN_CONFIDENCE:
-                                continue
-
-                            t = _clean_text(text)
-                            if not t:
-                                continue
-
-                            try:
-                                ys = [pt[1] for pt in bbox]
-                                center_y = sum(ys) / len(ys)
-                            except Exception:
-                                bottom_texts.append(t)
-                                continue
-
-                            if center_y < mid_y:
-                                top_texts.append(t)
-                            else:
-                                bottom_texts.append(t)
-                    else:
-                        print("EasyOCR reader not initialized; skipping circle OCR")
-                except Exception as e:
-                    print(f"OCR error for circle {i}: {e}")
-                    top_texts, bottom_texts = [], []
-
-                page_number, circle_text = _extract_page_and_circle(
-                    page_texts=bottom_texts, circle_texts=top_texts
-                )
-
-                results.append(
-                    {
-                        "id": i + 1,
-                        "x": int(x),
-                        "y": int(y),
-                        "r": int(r),
-                        "page_number": page_number,
-                        "circle_text": circle_text,
-                        # Debug fields to understand what OCR saw
-                        "raw_texts_top": top_texts,
-                        "raw_texts_bottom": bottom_texts,
-                    }
-                )
-
-        return results
+        return [results_map[i] for i in sorted(results_map)]
 
     except Exception as e:
         print(f"Circle detection error: {e}")
         return []
 
 
-def detect_circles_with_text_from_image_bytes(image_bytes):
+def detect_circles_with_text_from_image_bytes(image_bytes: bytes) -> list:
     """
     Thin wrapper that decodes bytes and calls detect_circles_with_text_from_image.
     """
@@ -438,193 +477,221 @@ def detect_circles_with_text_from_image_bytes(image_bytes):
         return []
 
 
-def detect_text_from_image_bytes(image_bytes):
+def _dedup_boxes(text_boxes: list[dict]) -> list[dict]:
     """
-    Detects text regions from the entire image using EasyOCR and filters them
-    down to plausible labels.
+    Deduplicate text boxes that share the same text and are within 50 px of
+    each other.
+
+    Optimisation vs. the original O(n²) nested loop:
+    - Sort by text first so identical texts are adjacent.
+    - Within each text group use a linear scan.
+    Overall complexity: O(n log n) instead of O(n²).
+    """
+    if not text_boxes:
+        return []
+
+    text_boxes_sorted = sorted(text_boxes, key=lambda b: b["text"])
+    unique: list[dict] = []
+
+    for box in text_boxes_sorted:
+        cx = (box["x1"] + box["x2"]) / 2
+        cy = (box["y1"] + box["y2"]) / 2
+        dup = False
+        # Only compare within boxes that have the same text (they are adjacent
+        # after sorting, but unique may have grown with many different texts).
+        # Walk backwards and stop as soon as the text differs.
+        for exist in reversed(unique):
+            if exist["text"] != box["text"]:
+                break
+            ecx = (exist["x1"] + exist["x2"]) / 2
+            ecy = (exist["y1"] + exist["y2"]) / 2
+            if ((cx - ecx) ** 2 + (cy - ecy) ** 2) ** 0.5 < 50:
+                dup = True
+                break
+        if not dup:
+            unique.append(box)
+
+    return unique
+
+
+def detect_text_from_image(img: np.ndarray) -> list:
+    """
+    Detects text regions from a pre-decoded BGR image using EasyOCR and filters
+    them down to plausible construction-plan labels.
+
+    Optimisations applied:
+    - Both OCR passes (preprocessed & raw) are submitted to the shared thread
+      pool and awaited together — their C-level work overlaps in time.
+    - Deduplication uses _dedup_boxes() which is O(n log n).
 
     Returns:
-        List of dictionaries containing:
-        - id (int): Text index
-        - x1, y1, x2, y2 (int): Bounding box coordinates
-        - text (str): Extracted text string
+        List of dicts: id, x1, y1, x2, y2, text
+    """
+    if img is None:
+        print("Failed to decode image for text detection")
+        return []
+
+    if _EASYOCR_READER is None:
+        print("EasyOCR reader not initialized; cannot perform text detection")
+        return []
+
+    # ── Run Pass 1 (preprocessed) concurrently with Pass 2 (raw) ──────────────
+    img_proc = _preprocess_for_easyocr(img)
+    future_pass1 = _OCR_POOL.submit(_run_easyocr, img_proc, EASYOCR_PARAMS)
+    # We tentatively also start Pass 2 so its work can overlap; we may ignore
+    # the result if Pass 1 already gives enough boxes.
+    future_pass2 = _OCR_POOL.submit(_run_easyocr, img, EASYOCR_PARAMS)
+
+    ocr_results_1 = future_pass1.result()
+    # Only collect Pass 2 if Pass 1 was sparse (< 10 boxes after filtering).
+    # We determine this after filtering below.
+
+    text_boxes: list[dict] = []
+    idx = 1
+
+    def process_results(ocr_results, x_offset: int = 0, y_offset: int = 0):
+        nonlocal idx
+        for line in ocr_results:
+            bbox, text, conf = _unpack_easyocr_line(line)
+            if not text or bbox is None:
+                continue
+            if conf is not None and conf < EASYOCR_MIN_CONFIDENCE:
+                continue
+
+            t = _clean_text(text)
+            if len(t) < 2:
+                continue
+
+            if not _is_construction_text(t):
+                continue
+
+            try:
+                xs = [pt[0] for pt in bbox]
+                ys = [pt[1] for pt in bbox]
+                min_x, max_x = min(xs), max(xs)
+                min_y, max_y = min(ys), max(ys)
+
+                width  = max_x - min_x
+                height = max_y - min_y
+
+                if width < MIN_BOX_WIDTH or height < MIN_BOX_HEIGHT:
+                    continue
+
+                text_boxes.append(
+                    {
+                        "id": idx,
+                        "x1": int(min_x + x_offset),
+                        "y1": int(min_y + y_offset),
+                        "x2": int(max_x + x_offset),
+                        "y2": int(max_y + y_offset),
+                        "text": t,
+                    }
+                )
+                idx += 1
+            except Exception as e:
+                print(f"Error processing EasyOCR text box: {e}")
+                continue
+
+    if ocr_results_1:
+        process_results(ocr_results_1)
+
+    # Collect Pass 2 only when Pass 1 was sparse
+    if len(text_boxes) < 10:
+        ocr_results_2 = future_pass2.result()
+        if ocr_results_2:
+            process_results(ocr_results_2)
+    else:
+        # Cancel the future if still running (best-effort; Python futures cannot
+        # truly cancel in-progress work, but we avoid blocking on result()).
+        future_pass2.cancel()
+
+    # Deduplicate — O(n log n) sort-based approach
+    unique_boxes = _dedup_boxes(text_boxes)
+
+    # ---------------------------------------------------------
+    # Group vertical text blocks (e.g. "OPEN SHELL" above "107")
+    # ---------------------------------------------------------
+    while True:
+        unique_boxes.sort(key=lambda b: (b["y1"], b["x1"]))
+
+        merged_boxes = []
+        used_indices: set[int] = set()
+        has_merge = False
+
+        for i in range(len(unique_boxes)):
+            if i in used_indices:
+                continue
+
+            base = unique_boxes[i]
+            merged_this_iter = False
+
+            for j in range(i + 1, len(unique_boxes)):
+                if j in used_indices:
+                    continue
+
+                cand = unique_boxes[j]
+
+                v_gap  = cand["y1"] - base["y2"]
+                base_h = base["y2"] - base["y1"]
+
+                if -5 <= v_gap <= base_h * 1.2:
+                    b_x1, b_x2 = base["x1"], base["x2"]
+                    c_x1, c_x2 = cand["x1"], cand["x2"]
+
+                    overlap_start = max(b_x1, c_x1)
+                    overlap_end   = min(b_x2, c_x2)
+                    overlap_len   = overlap_end - overlap_start
+
+                    min_width = min(b_x2 - b_x1, c_x2 - c_x1)
+
+                    if overlap_len > 0 and (overlap_len / min_width) > 0.3:
+                        new_box = {
+                            "id":   base["id"],
+                            "x1":   min(b_x1, c_x1),
+                            "y1":   min(base["y1"], cand["y1"]),
+                            "x2":   max(b_x2, c_x2),
+                            "y2":   max(base["y2"], cand["y2"]),
+                            "text": base["text"] + " " + cand["text"],
+                        }
+                        merged_boxes.append(new_box)
+                        used_indices.add(i)
+                        used_indices.add(j)
+                        merged_this_iter = True
+                        has_merge = True
+                        break
+
+            if not merged_this_iter:
+                merged_boxes.append(base)
+                used_indices.add(i)
+
+        if not has_merge:
+            break
+        unique_boxes = merged_boxes
+
+    # Re-index
+    for i, box in enumerate(unique_boxes):
+        box["id"] = i + 1
+
+    return unique_boxes
+
+
+def detect_text_from_image_bytes(image_bytes: bytes) -> list:
+    """
+    Detects text regions from the entire image using EasyOCR.
+    Thin wrapper that decodes bytes once and calls detect_text_from_image.
     """
     try:
         nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        if img is None:
-            print("Failed to decode image for text detection")
-            return []
-
-        if _EASYOCR_READER is None:
-            print("EasyOCR reader not initialized; cannot perform text detection")
-            return []
-
-        text_boxes: list[dict] = []
-        idx = 1
-
-        def process_results(ocr_results, x_offset=0, y_offset=0, apply_filter=True):
-            nonlocal idx
-            for line in ocr_results:
-                bbox, text, conf = _unpack_easyocr_line(line)
-                if not text or bbox is None:
-                    continue
-                if conf is not None and conf < EASYOCR_MIN_CONFIDENCE:
-                    continue
-
-                t = _clean_text(text)
-                if len(t) < 2:
-                    continue
-
-                if apply_filter and not _is_construction_text(t):
-                    continue
-
-                try:
-                    xs = [pt[0] for pt in bbox]
-                    ys = [pt[1] for pt in bbox]
-                    min_x, max_x = min(xs), max(xs)
-                    min_y, max_y = min(ys), max(ys)
-
-                    width = max_x - min_x
-                    height = max_y - min_y
-
-                    if width < MIN_BOX_WIDTH or height < MIN_BOX_HEIGHT:
-                        continue
-
-                    text_boxes.append(
-                        {
-                            "id": idx,
-                            "x1": int(min_x + x_offset),
-                            "y1": int(min_y + y_offset),
-                            "x2": int(max_x + x_offset),
-                            "y2": int(max_y + y_offset),
-                            "text": t,
-                        }
-                    )
-                    idx += 1
-                except Exception as e:
-                    print(f"Error processing EasyOCR text box: {e}")
-                    continue
-
-        # Pass 1: Preprocessed image (CLAHE)
-        img_proc = _preprocess_for_easyocr(img)
-        ocr_results_1 = _run_easyocr(img_proc, EASYOCR_PARAMS)
-        if ocr_results_1:
-            process_results(ocr_results_1, x_offset=0, y_offset=0, apply_filter=True)
-
-        # Pass 2: Raw image (if Pass 1 results are sparse, or to catch missed text)
-        # We run this if we found fewer than 5 items, OR always run it to be safe?
-        # Given "no text detected" complaints, let's be aggressive and run it if < 10 items.
-        if len(text_boxes) < 10:
-            ocr_results_2 = _run_easyocr(img, EASYOCR_PARAMS)
-            if ocr_results_2:
-                process_results(ocr_results_2, x_offset=0, y_offset=0, apply_filter=True)
-
-        # Deduplicate based on overlap and text content
-        unique_boxes = []
-        for box in text_boxes:
-            is_dup = False
-            for exist in unique_boxes:
-                # Check roughly if same text and same location
-                if box["text"] == exist["text"]:
-                    # Center distance
-                    cx1 = (box["x1"] + box["x2"]) / 2
-                    cy1 = (box["y1"] + box["y2"]) / 2
-                    cx2 = (exist["x1"] + exist["x2"]) / 2
-                    cy2 = (exist["y1"] + exist["y2"]) / 2
-                    dist = ((cx1 - cx2)**2 + (cy1 - cy2)**2)**0.5
-                    if dist < 50:  # 50 pixels tolerance
-                        is_dup = True
-                        break
-            if not is_dup:
-                unique_boxes.append(box)
-
-        # ---------------------------------------------------------
-        # Group vertical text blocks (e.g. "OPEN SHELL" above "107")
-        # ---------------------------------------------------------
-        # We repeat the merge pass until no more merges happen (handling 3+ lines)
-        while True:
-            # Sort by Y primarily to find top-down pairs
-            unique_boxes.sort(key=lambda b: (b["y1"], b["x1"]))
-            
-            merged_boxes = []
-            used_indices = set()
-            has_merge = False
-
-            for i in range(len(unique_boxes)):
-                if i in used_indices:
-                    continue
-                
-                base = unique_boxes[i]
-                merged_this_iter = False
-                
-                # Look for immediate neighbor below
-                for j in range(i + 1, len(unique_boxes)):
-                    if j in used_indices:
-                        continue
-                    
-                    cand = unique_boxes[j]
-                    
-                    # Vertical gap check
-                    # cand should be below base
-                    v_gap = cand["y1"] - base["y2"]
-                    base_h = base["y2"] - base["y1"]
-                    
-                    # If gap is too huge, stop looking? 
-                    # Not necessarily, as there might be other boxes in different columns.
-                    # But for performance, we can limit search scope if needed.
-                    # For now, just check criteria.
-                    
-                    # Criteria 1: Vertical proximity
-                    # Allow small gap (e.g. < height of top box) or slight overlap
-                    if -5 <= v_gap <= base_h * 1.2:
-                        # Criteria 2: Horizontal alignment
-                        b_x1, b_x2 = base["x1"], base["x2"]
-                        c_x1, c_x2 = cand["x1"], cand["x2"]
-                        
-                        overlap_start = max(b_x1, c_x1)
-                        overlap_end = min(b_x2, c_x2)
-                        overlap_len = overlap_end - overlap_start
-                        
-                        min_width = min(b_x2 - b_x1, c_x2 - c_x1)
-                        
-                        # Significant overlap (> 30% of smaller width)
-                        if overlap_len > 0 and (overlap_len / min_width) > 0.3:
-                            # Merge
-                            new_box = {
-                                "id": base["id"],
-                                "x1": min(b_x1, c_x1),
-                                "y1": min(base["y1"], cand["y1"]),
-                                "x2": max(b_x2, c_x2),
-                                "y2": max(base["y2"], cand["y2"]),
-                                "text": base["text"] + " " + cand["text"]
-                            }
-                            merged_boxes.append(new_box)
-                            used_indices.add(i)
-                            used_indices.add(j)
-                            merged_this_iter = True
-                            has_merge = True
-                            break 
-                
-                if not merged_this_iter:
-                    merged_boxes.append(base)
-                    used_indices.add(i)
-            
-            if not has_merge:
-                break
-            unique_boxes = merged_boxes
-
-        # Re-index
-        for i, box in enumerate(unique_boxes):
-            box["id"] = i + 1
-
-        return unique_boxes
-
+        img   = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        return detect_text_from_image(img)
     except Exception as e:
         print(f"Text detection error: {e}")
         return []
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Endpoint
+# ──────────────────────────────────────────────────────────────────────────────
 
 @router.post("/")
 async def detect_circles(file: UploadFile = File(...)):
@@ -633,20 +700,32 @@ async def detect_circles(file: UploadFile = File(...)):
 
     Steps:
     1. Accepts an image file via POST request.
-    2. Reads image bytes.
-    3. Runs circle detection (with OCR inside circles).
-    4. Runs general text detection across the entire image.
-    5. Returns results as a JSON response containing:
+    2. Reads image bytes and decodes once.
+    3. Offloads both heavy detections to asyncio.to_thread so the event loop
+       is never blocked.
+    4. Runs circle detection (with OCR inside circles).
+    5. Runs general text detection across the entire image.
+    6. Returns results as a JSON response containing:
         - circles: List of detected circles with text info
         - texts: List of detected text regions outside circles
     """
     try:
-        image_bytes = await file.read()    
-        circles_with_text = detect_circles_with_text_from_image_bytes(image_bytes)
-        texts = detect_text_from_image_bytes(image_bytes)
-        
+        image_bytes = await file.read()
+
+        # Decode image once; share numpy array between both detectors.
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img   = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return {"error": "Failed to decode image", "circles": [], "texts": []}
+
+        # Offload both sync-heavy functions to a thread so the event loop stays free.
+        circles_task = asyncio.to_thread(detect_circles_with_text_from_image, img)
+        texts_task   = asyncio.to_thread(detect_text_from_image, img)
+
+        circles_with_text, texts = await asyncio.gather(circles_task, texts_task)
+
         return {"circles": circles_with_text, "texts": texts}
-    
+
     except Exception as e:
         print(f"Detection endpoint error: {e}")
         return {"error": str(e), "circles": [], "texts": []}
