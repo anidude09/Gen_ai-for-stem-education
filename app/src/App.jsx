@@ -4,7 +4,6 @@ import ImageUploader from "./components/ImageUploader";
 import ImageCanvas from "./components/ImageCanvas";
 import LoginForm from "./components/Loginform";
 import Page from "./components/Page";
-import ChatBox from "./components/ChatBox";
 import VLMPanel from "./components/VLMPanel";
 import useLogout from "./hooks/useLogout";
 import useautoLogout from "./hooks/useautoLogout";
@@ -271,11 +270,6 @@ function MainPage() {
                 <li>Click red circles to navigate.</li>
               </ol>
             </div>
-          )}
-
-          {/* ChatBox - Term search at bottom of sidebar */}
-          {user && (
-            <ChatBox sessionId={sessionId} />
           )}
         </aside>
 
