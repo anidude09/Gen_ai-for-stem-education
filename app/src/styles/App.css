@@ -47,8 +47,8 @@
 }
 
 .sidebar {
-  width: 220px;
-  min-width: 220px;
+  width: 180px;
+  min-width: 180px;
   background-color: #1e293b;
   color: #f1f5f9;
   padding: 16px 12px;
@@ -63,14 +63,13 @@
 }
 
 .sidebar-title {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  color: #94a3b8;
-  /* slate-400 */
-  letter-spacing: 0.05em;
-  margin-bottom: 8px;
-  padding-left: 8px;
+  color: #64748b;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+  padding-left: 6px;
 }
 
 .sidebar-item {
@@ -94,16 +93,16 @@
 }
 
 .sidebar-item-title {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   color: #e2e8f0;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   display: block;
 }
 
 .sidebar-item-details {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: 10px;
+  color: #64748b;
   display: block;
 }
 

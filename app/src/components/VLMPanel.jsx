@@ -89,8 +89,8 @@ function Section({ title, children, isEmpty }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
     const panelStyle = {
-        width: "300px",
-        minWidth: "300px",
+        width: "340px",
+        minWidth: "340px",
         height: "100%",
         background: "rgba(15, 23, 42, 0.95)",
         borderLeft: "1px solid rgba(255,255,255,0.07)",
@@ -122,9 +122,8 @@ export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
         return (
             <aside style={panelStyle}>
                 <div style={headerStyle}>
-                    <span style={{ fontSize: "16px" }}>🤖</span>
                     <span style={{ fontWeight: 600, fontSize: "13px", color: "#f1f5f9" }}>
-                        AI Vision Analysis
+                        GPT 4o - Output :
                     </span>
                 </div>
                 <div
@@ -225,9 +224,8 @@ export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
 
             {/* Header */}
             <div style={headerStyle}>
-                <span style={{ fontSize: "16px" }}>🤖</span>
                 <span style={{ fontWeight: 600, fontSize: "13px", color: "#f1f5f9" }}>
-                    AI Vision Analysis
+                    GPT 4o - Output :
                 </span>
                 {vlmMode === "region" && (
                     <Badge label="Region" color={CATEGORY_COLORS.reference} />

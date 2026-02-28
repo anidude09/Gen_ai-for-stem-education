@@ -205,7 +205,7 @@ function MainPage() {
         )}
       </header>
 
-      <div className="app-body" style={{ display: "grid", gridTemplateColumns: "220px 1fr 300px", gridTemplateRows: "1fr", overflow: "hidden" }}>
+      <div className="app-body" style={{ display: "grid", gridTemplateColumns: "180px 1fr 340px", gridTemplateRows: "1fr", overflow: "hidden" }}>
         <aside className="sidebar">
           <h2 className="sidebar-title">Workspace</h2>
 
