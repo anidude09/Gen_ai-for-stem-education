@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "construction-vlm-analyzer"
+version = "0.1.0"
+description = "GPT-4o Vision wrapper for analyzing construction drawings with structured JSON output"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.30.0",
+    "Pillow>=9.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

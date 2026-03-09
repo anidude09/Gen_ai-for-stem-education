@@ -14,6 +14,7 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import ZoomControls from "./ZoomControls";
 import useZoom from "../hooks/useZoom";
+import { API_BASE_URL } from "../config";
 import "../styles/zoom.css";
 import ImageUploader from "./ImageUploader"; // Ensure this is imported if we use it directly here or nearby
 
@@ -24,7 +25,7 @@ function Page() {
 
   const [highlightCircle, setHighlightCircle] = useState(null);
   const [imageInfo, setImageInfo] = useState(null);
-  
+
   const imgRef = useRef(null);
   const wrapperRef = useRef(null);
 
@@ -57,8 +58,9 @@ function Page() {
         const blob = await fetch(pageImage).then((res) => res.blob());
         const formData = new FormData();
         formData.append("file", blob, "page.png");
+        formData.append("circles_only", "true");
 
-        const resp = await fetch("http://localhost:8001/detect/", {
+        const resp = await fetch(`${API_BASE_URL}/detect/`, {
           method: "POST",
           body: formData,
         });

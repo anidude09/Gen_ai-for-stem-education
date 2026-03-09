@@ -10,13 +10,14 @@
 
 import { useCallback } from "react";
 import { logActivity } from "../utils/activityLogger";
+import { API_BASE_URL } from "../config";
 
 export default function useLogout(sessionId, setUser, setSessionId, setImageUrl) {
   return useCallback(async () => {
     if (!sessionId) return;
 
     try {
-      await fetch("http://localhost:8001/auth/logout", {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId }),
@@ -33,5 +34,9 @@ export default function useLogout(sessionId, setUser, setSessionId, setImageUrl)
     setUser(null);
     setSessionId(null);
     setImageUrl(null);
+
+    // Clear session storage to prevent auto-login on refresh
+    sessionStorage.removeItem("drawingAppUser");
+    sessionStorage.removeItem("drawingAppSessionId");
   }, [sessionId, setUser, setSessionId, setImageUrl]);
 }

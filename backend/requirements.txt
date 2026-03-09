@@ -6,7 +6,6 @@ opencv-python==4.8.1.78
 python-dotenv==1.0.1
 groq
 openai>=1.30.0
-easyocr==1.7.1
 httpx
 requests
 

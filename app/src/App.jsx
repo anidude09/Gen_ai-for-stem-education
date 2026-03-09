@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import ImageUploader from "./components/ImageUploader";
 import ImageCanvas from "./components/ImageCanvas";
@@ -8,43 +8,82 @@ import VLMPanel from "./components/VLMPanel";
 import useLogout from "./hooks/useLogout";
 import useautoLogout from "./hooks/useautoLogout";
 import useZoom from "./hooks/useZoom";
+import { API_BASE_URL } from "./config";
 import "./styles/App.css";
 
 function MainPage() {
-  // Main (uploaded) sheet state
-  const [imageUrl, setImageUrl] = useState(null);
-  const [rawCircles, setRawCircles] = useState([]);
-  const [rawTexts, setRawTexts] = useState([]);
-  const [circles, setCircles] = useState([]);
-  const [texts, setTexts] = useState([]);
-  const [selectedShape, setSelectedShape] = useState(null);
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState(null);
-  const [imageInfo, setImageInfo] = useState(null);
-
-  // Detail sheet (navigated-to page) state
-  const [detailImageUrl, setDetailImageUrl] = useState(null);
-  const [detailPageLabel, setDetailPageLabel] = useState(null);
-  const [detailRawCircles, setDetailRawCircles] = useState([]);
-  const [detailRawTexts, setDetailRawTexts] = useState([]);
-  const [detailCircles, setDetailCircles] = useState([]);
-  const [detailTexts, setDetailTexts] = useState([]);
-  const [detailSelectedShape, setDetailSelectedShape] = useState(null);
-  const [detailLoaded, setDetailLoaded] = useState(false);
-  const [detailError, setDetailError] = useState(null);
-  const [detailImageInfo, setDetailImageInfo] = useState(null);
-  const [detailTargetCircleText, setDetailTargetCircleText] = useState(null);
+  // Workspace views state dictionary
+  // Keys are "main" or "detail". We store all detection arrays and layout info here.
+  const [views, setViews] = useState({
+    main: {
+      imageUrl: null,
+      rawCircles: [],
+      rawTexts: [],
+      circles: [],
+      texts: [],
+      selectedShape: null,
+      loaded: false,
+      error: null,
+      imageInfo: null,
+    },
+    detail: {
+      imageUrl: null,
+      pageLabel: null,
+      targetCircleText: null,
+      rawCircles: [],
+      rawTexts: [],
+      circles: [],
+      texts: [],
+      selectedShape: null,
+      loaded: false,
+      error: null,
+      imageInfo: null,
+    }
+  });
 
   // Which "tab" is active in the workspace: "main" or "detail"
   const [activeView, setActiveView] = useState("main");
 
-  const [user, setUser] = useState(null);
-  const [sessionId, setSessionId] = useState(null);
+  // Helper to update a single view's state
+  const updateView = (viewName, updates) => {
+    setViews((prev) => ({
+      ...prev,
+      [viewName]: { ...prev[viewName], ...updates },
+    }));
+  };
+
+  // We expose a setter for the main imageUrl to stick with the existing ImageUploader contract
+  const setImageUrl = (url) => updateView("main", { imageUrl: url });
+
+  // Helper to check if a specific view is currently valid and ready for operations
+  const isViewValid = (viewStr) => Boolean(views[viewStr]);
+
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem("drawingAppUser");
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.warn("Failed to parse user session", e);
+      return null;
+    }
+  });
+
+  const [sessionId, setSessionId] = useState(() => {
+    try {
+      return sessionStorage.getItem("drawingAppSessionId") || null;
+    } catch (e) {
+      return null;
+    }
+  });
 
   // VLM (GPT-4o Vision) side-panel state
   const [vlmResult, setVlmResult] = useState(null);
   const [vlmLoading, setVlmLoading] = useState(false);
   const [vlmMode, setVlmMode] = useState(null); // "full" | "region"
+  const [vlmPanelOpen, setVlmPanelOpen] = useState(true); // Toggle for right panel
+
+  // VLM label → drawing text linking
+  const [highlightedTextBox, setHighlightedTextBox] = useState(null); // {id, category}
 
   const imgRef = useRef(null);
   const detailImgRef = useRef(null);
@@ -82,7 +121,7 @@ function MainPage() {
     }
 
     try {
-      const res = await fetch("http://localhost:8001/vlm/analyze", {
+      const res = await fetch(`${API_BASE_URL}/vlm/analyze`, {
         method: "POST",
         body: formData,
       });
@@ -113,36 +152,104 @@ function MainPage() {
       circleText,
     });
 
-    setDetailPageLabel(pageNumber);
-    setDetailImageUrl(pageImageUrl);
-    setDetailTargetCircleText(circleText || null);
-    setActiveView("detail");
+    updateView("detail", {
+      imageUrl: pageImageUrl,
+      pageLabel: pageNumber,
+      targetCircleText: circleText || null,
+      loaded: false,
+      error: null,
+      rawCircles: [],
+      rawTexts: [],
+      circles: [],
+      texts: [],
+      selectedShape: null,
+      imageInfo: null,
+    });
 
-    // Reset detail workspace state so detection can run fresh
-    setDetailLoaded(false);
-    setDetailError(null);
-    setDetailRawCircles([]);
-    setDetailRawTexts([]);
-    setDetailCircles([]);
-    setDetailTexts([]);
-    setDetailSelectedShape(null);
-    setDetailImageInfo(null);
+    setActiveView("detail");
+  };
+
+  // ── VLM label → PaddleOCR text matching ──────────────────────────────────
+  // Build a set of VLM label texts that have a matching PaddleOCR text box
+  const matchableLabels = useMemo(() => {
+    const vlmLabels = vlmResult?.text_labels || [];
+    const ocrTexts = views[activeView]?.rawTexts || [];
+    if (!vlmLabels.length || !ocrTexts.length) return new Set();
+
+    const matchable = new Set();
+    for (const label of vlmLabels) {
+      const vlmText = (label.text || "").toUpperCase().trim();
+      if (!vlmText) continue;
+      for (const ocr of ocrTexts) {
+        const ocrText = (ocr.text || "").toUpperCase().trim();
+        if (!ocrText) continue;
+        // Exact match or one contains the other
+        if (ocrText === vlmText || ocrText.includes(vlmText) || vlmText.includes(ocrText)) {
+          matchable.add(vlmText);
+          break;
+        }
+      }
+    }
+    return matchable;
+  }, [vlmResult, views, activeView]);
+
+  // When user clicks a VLM label, find matching PaddleOCR text box
+  const handleVlmLabelClick = (labelText, category) => {
+    const target = (labelText || "").toUpperCase().trim();
+    if (!target) return;
+
+    const ocrTexts = views[activeView]?.rawTexts || [];
+
+    // 1. Exact match
+    let match = ocrTexts.find(t => (t.text || "").toUpperCase().trim() === target);
+
+    // 2. OCR text contains VLM label
+    if (!match) {
+      match = ocrTexts.find(t => (t.text || "").toUpperCase().trim().includes(target));
+    }
+
+    // 3. VLM label contains OCR text
+    if (!match) {
+      match = ocrTexts.find(t => {
+        const ocrText = (t.text || "").toUpperCase().trim();
+        return ocrText.length >= 2 && target.includes(ocrText);
+      });
+    }
+
+    if (match) {
+      const currentImageInfo = views[activeView]?.imageInfo;
+      // Scale to display coordinates
+      const scaled = {
+        ...match,
+        x1: match.x1 * (currentImageInfo?.scaleX || 1),
+        y1: match.y1 * (currentImageInfo?.scaleY || 1),
+        x2: match.x2 * (currentImageInfo?.scaleX || 1),
+        y2: match.y2 * (currentImageInfo?.scaleY || 1),
+      };
+      setHighlightedTextBox({ ...scaled, category });
+
+      // Auto-clear highlight after 4 seconds
+      setTimeout(() => setHighlightedTextBox(null), 4000);
+    } else {
+      console.log(`[VLM] No PaddleOCR match for "${labelText}"`);
+      setHighlightedTextBox(null);
+    }
   };
 
   // When the detail image + its layout info are ready and we know the
   // target circle text, automatically run detection and highlight circles.
   useEffect(() => {
-    const shouldDetect =
-      detailImageUrl && detailImageInfo && detailTargetCircleText;
+    const detail = views.detail;
+    const shouldDetect = detail.imageUrl && detail.imageInfo && detail.targetCircleText;
     if (!shouldDetect) return;
 
     const detectDetail = async () => {
       try {
-        const blob = await fetch(detailImageUrl).then((res) => res.blob());
+        const blob = await fetch(detail.imageUrl).then((res) => res.blob());
         const formData = new FormData();
         formData.append("file", blob, "detail.png");
 
-        const resp = await fetch("http://localhost:8001/detect/", {
+        const resp = await fetch(`${API_BASE_URL}/detect/`, {
           method: "POST",
           body: formData,
         });
@@ -150,20 +257,17 @@ function MainPage() {
         if (!resp.ok) throw new Error(`Detection failed: ${await resp.text()}`);
 
         const data = await resp.json();
-        const rawCircles = data.circles || [];
+        const rawArray = data.circles || [];
 
-        setDetailRawCircles(rawCircles);
-        setDetailRawTexts([]);
-
-        const scaledCircles = rawCircles.map((c) => ({
+        const scaledCircles = rawArray.map((c) => ({
           ...c,
-          x: c.x * detailImageInfo.scaleX,
-          y: c.y * detailImageInfo.scaleY,
-          r: c.r * Math.min(detailImageInfo.scaleX, detailImageInfo.scaleY),
+          x: c.x * detail.imageInfo.scaleX,
+          y: c.y * detail.imageInfo.scaleY,
+          r: c.r * Math.min(detail.imageInfo.scaleX, detail.imageInfo.scaleY),
         }));
 
         // Only keep circles matching the target circle_text
-        const targetLower = detailTargetCircleText.trim().toLowerCase();
+        const targetLower = detail.targetCircleText.trim().toLowerCase();
         const matched = scaledCircles.filter(
           (c) =>
             c.circle_text &&
@@ -171,32 +275,25 @@ function MainPage() {
             c.circle_text.trim().toLowerCase() === targetLower
         );
 
-        // Only show the matching circle(s), not all detected shapes
-        setDetailCircles(matched);
-        setDetailTexts([]);
+        updateView("detail", {
+          rawCircles: rawArray,
+          rawTexts: [],
+          circles: matched,
+          texts: []
+        });
       } catch (err) {
         console.error("Detail detection error:", err);
-        setDetailError(`Failed to detect on detail page: ${err.message}`);
+        updateView("detail", { error: `Failed to detect on detail page: ${err.message}` });
       }
     };
 
     detectDetail();
-  }, [detailImageUrl, detailImageInfo, detailTargetCircleText]);
+  }, [views.detail.imageUrl, views.detail.imageInfo, views.detail.targetCircleText]);
 
   return (
     <div className="container">
       <header className="app-header" style={{ justifyContent: "flex-start", gap: "20px" }}>
         <h1 className="heading" style={{ textAlign: "left", margin: 0 }}>Generative AI for STEM Education</h1>
-
-        {user && imageUrl && (
-          <div className="zoom-controls-header">
-            <button onClick={zoomOut} title="Zoom out" className="zoom-btn-header">−</button>
-            <span style={{ fontSize: "14px", color: "#cbd5e1", width: "40px", textAlign: "center" }}>
-              {Math.round(zoom * 100)}%
-            </span>
-            <button onClick={zoomIn} title="Zoom in" className="zoom-btn-header">+</button>
-          </div>
-        )}
 
         {user && (
           <button onClick={handleLogout} className="logout-button" style={{ marginLeft: "auto", position: "static" }}>
@@ -205,36 +302,45 @@ function MainPage() {
         )}
       </header>
 
-      <div className="app-body" style={{ display: "grid", gridTemplateColumns: "180px 1fr 340px", gridTemplateRows: "1fr", overflow: "hidden" }}>
+      <div
+        className="app-body"
+        style={{
+          display: "grid",
+          gridTemplateColumns: `180px 1fr ${user && vlmPanelOpen ? "340px" : "0px"}`,
+          gridTemplateRows: "1fr",
+          overflow: "hidden",
+          transition: "grid-template-columns 0.3s ease"
+        }}
+      >
         <aside className="sidebar">
           <h2 className="sidebar-title">Workspace</h2>
 
           <div
             className={`sidebar-item ${activeView === "main" ? "active" : ""}`}
-            onClick={() => imageUrl && setActiveView("main")}
-            style={{ opacity: imageUrl ? 1 : 0.5, pointerEvents: imageUrl ? "auto" : "none" }}
+            onClick={() => views.main.imageUrl && setActiveView("main")}
+            style={{ opacity: views.main.imageUrl ? 1 : 0.5, pointerEvents: views.main.imageUrl ? "auto" : "none" }}
           >
             <span className="sidebar-item-title">Main Sheet</span>
-            {imageInfo ? (
+            {views.main.imageInfo ? (
               <span className="sidebar-item-details">
-                {imageInfo.naturalWidth} x {imageInfo.naturalHeight} px
+                {views.main.imageInfo.naturalWidth} x {views.main.imageInfo.naturalHeight} px
               </span>
             ) : (
               <span className="sidebar-item-details">No image loaded</span>
             )}
           </div>
 
-          {detailImageUrl && (
+          {views.detail.imageUrl && (
             <div
               className={`sidebar-item ${activeView === "detail" ? "active" : ""}`}
               onClick={() => setActiveView("detail")}
             >
               <span className="sidebar-item-title">
-                Page {detailPageLabel || "Detail"}
+                Page {views.detail.pageLabel || "Detail"}
               </span>
-              {detailImageInfo && (
+              {views.detail.imageInfo && (
                 <span className="sidebar-item-details">
-                  {detailImageInfo.naturalWidth} x {detailImageInfo.naturalHeight} px
+                  {views.detail.imageInfo.naturalWidth} x {views.detail.imageInfo.naturalHeight} px
                 </span>
               )}
             </div>
@@ -244,23 +350,25 @@ function MainPage() {
           {user && (
             <div style={{ marginTop: "12px" }}>
               <ImageUploader
-                setImageUrl={setImageUrl}
+                setImageUrl={(url) => setImageUrl(url)}
                 resetStates={() => {
-                  setLoaded(false);
-                  setError(null);
-                  setRawCircles([]);
-                  setRawTexts([]);
-                  setCircles([]);
-                  setTexts([]);
-                  setSelectedShape(null);
-                  setImageInfo(null);
+                  updateView("main", {
+                    loaded: false,
+                    error: null,
+                    rawCircles: [],
+                    rawTexts: [],
+                    circles: [],
+                    texts: [],
+                    selectedShape: null,
+                    imageInfo: null,
+                  });
                 }}
               />
             </div>
           )}
 
           {/* Instructions - Moved to sidebar bottom */}
-          {activeView === "main" && imageUrl && (
+          {activeView === "main" && views.main.imageUrl && (
             <div className="instructions-panel sidebar-instructions">
               <h3>How to Use</h3>
               <ol>
@@ -278,75 +386,116 @@ function MainPage() {
             <LoginForm setUser={setUser} setSessionId={setSessionId} />
           ) : (
             <>
-              {error && <div className="error">{error}</div>}
+              {Object.values(views).map((v, i) => v.error && <div key={i} className="error">{v.error}</div>)}
 
               {/* Main sheet view */}
-              {activeView === "main" && imageUrl && (
+              {activeView === "main" && views.main.imageUrl && (
                 <div className="image-area">
                   <ImageCanvas
-                    imageUrl={imageUrl}
+                    imageUrl={views.main.imageUrl}
                     imgRef={imgRef}
-                    setLoaded={setLoaded}
-                    setError={setError}
-                    setImageInfo={setImageInfo}
-                    setCircles={setCircles}
-                    setTexts={setTexts}
-                    setRawCircles={setRawCircles}
-                    setRawTexts={setRawTexts}
-                    loaded={loaded}
-                    imageInfo={imageInfo}
-                    circles={circles}
-                    texts={texts}
-                    setSelectedShape={setSelectedShape}
-                    selectedShape={selectedShape}
+                    setLoaded={(v) => updateView("main", { loaded: v })}
+                    setError={(v) => updateView("main", { error: v })}
+                    setImageInfo={(v) => updateView("main", { imageInfo: v })}
+                    setCircles={(v) => updateView("main", { circles: v })}
+                    setTexts={(v) => updateView("main", { texts: v })}
+                    setRawCircles={(v) => updateView("main", { rawCircles: v })}
+                    setRawTexts={(v) => updateView("main", { rawTexts: v })}
+                    loaded={views.main.loaded}
+                    imageInfo={views.main.imageInfo}
+                    circles={views.main.circles}
+                    texts={views.main.texts}
+                    setSelectedShape={(v) => updateView("main", { selectedShape: v })}
+                    selectedShape={views.main.selectedShape}
                     sessionId={sessionId}
                     onNavigateToPage={handleNavigateToPage}
                     zoom={zoom}
+                    zoomIn={zoomIn}
+                    zoomOut={zoomOut}
                     handleWheel={handleWheel}
                     onVlmDetect={handleVlmDetect}
+                    highlightedTextBox={highlightedTextBox}
+                    vlmResult={vlmResult}
                   />
                 </div>
               )}
 
               {/* Detail sheet view (navigated page) */}
-              {activeView === "detail" && detailImageUrl && (
+              {activeView === "detail" && views.detail.imageUrl && (
                 <div className="image-area">
                   <ImageCanvas
-                    imageUrl={detailImageUrl}
+                    imageUrl={views.detail.imageUrl}
                     imgRef={detailImgRef}
-                    setLoaded={setDetailLoaded}
-                    setError={setDetailError}
-                    setImageInfo={setDetailImageInfo}
-                    setCircles={setDetailCircles}
-                    setTexts={setDetailTexts}
-                    setRawCircles={setDetailRawCircles}
-                    setRawTexts={setDetailRawTexts}
-                    loaded={detailLoaded}
-                    imageInfo={detailImageInfo}
-                    circles={detailCircles}
-                    texts={detailTexts}
-                    setSelectedShape={setDetailSelectedShape}
-                    selectedShape={detailSelectedShape}
+                    setLoaded={(v) => updateView("detail", { loaded: v })}
+                    setError={(v) => updateView("detail", { error: v })}
+                    setImageInfo={(v) => updateView("detail", { imageInfo: v })}
+                    setCircles={(v) => updateView("detail", { circles: v })}
+                    setTexts={(v) => updateView("detail", { texts: v })}
+                    setRawCircles={(v) => updateView("detail", { rawCircles: v })}
+                    setRawTexts={(v) => updateView("detail", { rawTexts: v })}
+                    loaded={views.detail.loaded}
+                    imageInfo={views.detail.imageInfo}
+                    circles={views.detail.circles}
+                    texts={views.detail.texts}
+                    setSelectedShape={(v) => updateView("detail", { selectedShape: v })}
+                    selectedShape={views.detail.selectedShape}
                     sessionId={sessionId}
                     onNavigateToPage={handleNavigateToPage}
                     zoom={zoom}
+                    zoomIn={zoomIn}
+                    zoomOut={zoomOut}
                     handleWheel={handleWheel}
-                    highlightCircleText={detailTargetCircleText}
+                    highlightCircleText={views.detail.targetCircleText}
                     hideControls
                   />
-                  {detailError && <div className="error">{detailError}</div>}
                 </div>
               )}
             </>
           )}
         </main>
 
-        {/* VLM right panel — always shown when user is logged in */}
+        {/* VLM right panel toggle button */}
+        {user && (
+          <button
+            onClick={() => setVlmPanelOpen(!vlmPanelOpen)}
+            style={{
+              position: "fixed",
+              right: vlmPanelOpen ? "340px" : "0",
+              top: "50%",
+              transform: "translateY(-50%)",
+              zIndex: 3000,
+              background: "#3b82f6",
+              color: "white",
+              border: "none",
+              padding: "16px 8px",
+              cursor: "pointer",
+              borderRadius: "8px 0 0 8px",
+              transition: "right 0.3s ease",
+              boxShadow: "-2px 0 8px rgba(0,0,0,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            title={vlmPanelOpen ? "Close AI Panel" : "Open AI Panel"}
+          >
+            {vlmPanelOpen ? "▶" : "◀"}
+          </button>
+        )}
+
+        {/* VLM right panel — conditionally hidden via CSS Grid but kept in DOM for state */}
         {user && (
           <VLMPanel
             vlmResult={vlmResult}
             vlmLoading={vlmLoading}
             vlmMode={vlmMode}
+            onLabelClick={handleVlmLabelClick}
+            matchableLabels={matchableLabels}
+            onCircleNavigate={(pageRef, circleNumber) => {
+              const imagePath = `/images/${pageRef}.png`;
+              handleNavigateToPage(imagePath, pageRef, circleNumber);
+            }}
+            isOpen={vlmPanelOpen}
+            onToggle={() => setVlmPanelOpen(!vlmPanelOpen)}
           />
         )}
 

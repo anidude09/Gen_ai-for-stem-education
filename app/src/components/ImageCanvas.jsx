@@ -15,8 +15,8 @@ import React, { useRef, useState } from "react";
 import ShapeOverlay from "./ShapeOverlay";
 import Popup from "./Popup";
 import ZoomControls from "./ZoomControls";
-import useZoom from "../hooks/useZoom";
 import { logActivity } from "../utils/activityLogger";
+import { API_BASE_URL } from "../config";
 
 function ImageCanvas({
   imageUrl,
@@ -37,9 +37,13 @@ function ImageCanvas({
   sessionId,
   onNavigateToPage,
   zoom,
+  zoomIn,
+  zoomOut,
   highlightCircleText,
   hideControls,
   onVlmDetect,           // NEW: fires GPT-4o Vision analysis in parallel
+  highlightedTextBox,     // {id, category} of text box to highlight from VLM click
+  vlmResult,              // VLM analysis for drawing context in explanations
 }) {
   const wrapperRef = useRef(null);
   // Zoom is now managed by parent (App.jsx) or context, passed in as prop
@@ -96,7 +100,7 @@ function ImageCanvas({
         eventData: { imageUrl },
       });
 
-      const res = await fetch("http://localhost:8001/detect/", {
+      const res = await fetch(`${API_BASE_URL}/detect/`, {
         method: "POST",
         body: formData,
       });
@@ -195,7 +199,7 @@ function ImageCanvas({
         );
       }
 
-      const res = await fetch("http://localhost:8001/detect/region-detect", {
+      const res = await fetch(`${API_BASE_URL}/detect/region-detect`, {
         method: "POST",
         body: formData,
       });
@@ -310,7 +314,9 @@ function ImageCanvas({
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      {/* ZoomControls removed from here, now in App header */}
+      {imageUrl && (
+        <ZoomControls zoom={zoom} zoomIn={zoomIn} zoomOut={zoomOut} />
+      )}
 
       {!hideControls && (
         <div style={{ margin: "8px 0" }}>
@@ -382,6 +388,7 @@ function ImageCanvas({
                 selection={selection}
                 onShapeClick={handleShapeSelected}
                 highlightCircleText={highlightCircleText}
+                highlightedTextBox={highlightedTextBox}
               />
               {selectedShape && (
                 <Popup
@@ -390,6 +397,7 @@ function ImageCanvas({
                   zoom={zoom}
                   onNavigateToPage={onNavigateToPage}
                   sessionId={sessionId}
+                  vlmResult={vlmResult}
                 />
               )}
             </>

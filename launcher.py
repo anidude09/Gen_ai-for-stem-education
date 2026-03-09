@@ -36,7 +36,8 @@ REQUIRED_PACKAGES = [
     "uvicorn",
     "numpy",
     "cv2",        # opencv-python
-    "easyocr",
+    "paddleocr",  # PaddleOCR (replaced easyocr)
+    "openai",
     "groq",
     "PIL",        # pillow
     "requests",

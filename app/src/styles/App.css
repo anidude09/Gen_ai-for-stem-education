@@ -188,6 +188,33 @@
   overflow: auto;
 }
 
+/* Custom sleek scrollbars for the drawing canvas canvas */
+.image-area::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.image-area::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  /* match app dark theme */
+  border-radius: 4px;
+}
+
+.image-area::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.5);
+  /* slate-500 translucent */
+  border-radius: 4px;
+}
+
+.image-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.8);
+  /* slate-400 */
+}
+
+.image-area::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 .file-input {
   margin-bottom: 20px;
   width: 100%;
@@ -408,4 +435,38 @@ rect {
     stroke-opacity: 0.3;
     stroke-width: 7;
   }
+}
+
+/* ===== Text Highlight Pulse Animation (VLM label → drawing link) ===== */
+.text-highlight-pulse {
+  animation: text-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes text-pulse {
+
+  0%,
+  100% {
+    stroke-opacity: 1;
+    stroke-width: 3;
+  }
+
+  50% {
+    stroke-opacity: 0.4;
+    stroke-width: 5;
+  }
+}
+
+/* ===== VLM Panel Shimmer Animation (skeleton loader) ===== */
+@keyframes vlm-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.vlm-label-row:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
 }

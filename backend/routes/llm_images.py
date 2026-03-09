@@ -66,8 +66,11 @@ async def explain_with_images(request: LLMRequest):
     that the original behavior remains unchanged.
     """
     try:
-        # 1) Structured LLM interpretation of the snippet
-        info = generate_info_from_llm_structured(request.content)
+        # 1) Structured LLM interpretation of the snippet (with drawing context)
+        info = generate_info_from_llm_structured(
+            request.content,
+            drawing_context=request.drawing_context,
+        )
 
         # 2) Image search query
         query = _build_image_query(request.content, info)

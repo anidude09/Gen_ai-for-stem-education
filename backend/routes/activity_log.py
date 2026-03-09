@@ -53,8 +53,6 @@ _LOG_FIELDNAMES = [
 
 
 # ── Performance: resolve path and create file once at module import ─────────
-# Resolving Path(__file__) and checking path.exists() on every request adds
-# unnecessary syscall overhead.  We do it once here and cache the result.
 _LOG_PATH: Path = Path(__file__).resolve().parent.parent / "activity_log.csv"
 
 
@@ -75,11 +73,53 @@ def _ensure_log_file(path: Path) -> None:
 _ensure_log_file(_LOG_PATH)
 
 
+# ── Buffered CSV writer ────────────────────────────────────────────────────
+# Instead of opening/writing/closing the CSV file on every single event,
+# we collect events in a buffer and flush them in batch.  This reduces
+# file I/O from N open/write/close cycles to ~N/10.
+import threading
+import atexit
+
+_LOG_BUFFER: list[dict] = []
+_LOG_LOCK = threading.Lock()
+_FLUSH_INTERVAL = 5.0      # seconds
+_FLUSH_THRESHOLD = 10       # flush when N events are buffered
+
+
+def _flush_log_buffer() -> None:
+    """Write all buffered rows to disk in a single file-open."""
+    with _LOG_LOCK:
+        if not _LOG_BUFFER:
+            return
+        rows = list(_LOG_BUFFER)
+        _LOG_BUFFER.clear()
+
+    with _LOG_PATH.open("a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_LOG_FIELDNAMES)
+        for row in rows:
+            writer.writerow(row)
+
+
+def _periodic_flush():
+    """Background timer thread: flushes the buffer every _FLUSH_INTERVAL seconds."""
+    _flush_log_buffer()
+    _timer = threading.Timer(_FLUSH_INTERVAL, _periodic_flush)
+    _timer.daemon = True
+    _timer.start()
+
+
+# Start the background flush timer
+_periodic_flush()
+
+# Ensure remaining events are written on shutdown
+atexit.register(_flush_log_buffer)
+
+
 @router.post("/activity/log", tags=["Activity"])
 async def log_activity(event: ActivityEvent) -> dict:
     """
-    Append a single activity event to the CSV log.
-    Intended to be called from the frontend for important user actions.
+    Buffer a single activity event.  Events are flushed to the CSV file
+    every 5 seconds or every 10 events, whichever comes first.
     """
 
     timestamp = event.timestamp_utc or datetime.utcnow()
@@ -93,10 +133,12 @@ async def log_activity(event: ActivityEvent) -> dict:
         "event_data_json": json.dumps(event.event_data or {}, ensure_ascii=False),
     }
 
-    with _LOG_PATH.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=_LOG_FIELDNAMES)
-        writer.writerow(row)
+    with _LOG_LOCK:
+        _LOG_BUFFER.append(row)
+        should_flush = len(_LOG_BUFFER) >= _FLUSH_THRESHOLD
+
+    if should_flush:
+        _flush_log_buffer()
 
     return {"status": "ok"}
-
 

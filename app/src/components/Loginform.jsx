@@ -11,6 +11,7 @@
 import { useState } from "react";
 import "../styles/LoginForm.css";
 import { logActivity } from "../utils/activityLogger";
+import { API_BASE_URL } from "../config";
 
 function LoginForm({ setUser, setSessionId }) {
   const [name, setName] = useState("");
@@ -24,7 +25,7 @@ function LoginForm({ setUser, setSessionId }) {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:8001/auth/login", {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
         body: new URLSearchParams({ name, email }),
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -33,8 +34,13 @@ function LoginForm({ setUser, setSessionId }) {
       const data = await response.json();
 
       if (response.ok && data.session_id) {
+        // Save to React state
         setUser({ name, email });
         setSessionId(data.session_id);
+
+        // Save to browser session storage to survive reloads
+        sessionStorage.setItem("drawingAppUser", JSON.stringify({ name, email }));
+        sessionStorage.setItem("drawingAppSessionId", data.session_id);
 
         // Log a successful login associated with the newly created session
         logActivity({
@@ -78,11 +84,11 @@ function LoginForm({ setUser, setSessionId }) {
           disabled={loading}
         />
         {error && (
-          <div 
-            className="error-message" 
+          <div
+            className="error-message"
             style={{
-              color: '#fca5a5', 
-              margin: '0', 
+              color: '#fca5a5',
+              margin: '0',
               fontSize: '0.9rem',
               background: 'rgba(185, 28, 28, 0.2)',
               padding: '8px',

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "construction-plan-rag"
+version = "0.1.0"
+description = "RAG service combining ChromaDB vector search and exact JSON dictionary lookups for construction terms"
+requires-python = ">=3.9"
+dependencies = [
+    "langchain>=0.1.0",
+    "langchain-community>=0.0.10",
+    "sentence-transformers>=2.2.0",
+    "chromadb>=0.4.0",
+    "pypdf>=3.0.0"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

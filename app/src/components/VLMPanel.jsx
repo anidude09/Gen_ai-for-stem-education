@@ -87,10 +87,9 @@ function Section({ title, children, isEmpty }) {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
+export default function VLMPanel({ vlmResult, vlmLoading, vlmMode, onLabelClick, matchableLabels, onCircleNavigate, isOpen, onToggle }) {
     const panelStyle = {
         width: "340px",
-        minWidth: "340px",
         height: "100%",
         background: "rgba(15, 23, 42, 0.95)",
         borderLeft: "1px solid rgba(255,255,255,0.07)",
@@ -98,6 +97,7 @@ export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
         flexDirection: "column",
         overflow: "hidden",
         fontFamily: "inherit",
+        position: "relative",
     };
 
     const headerStyle = {
@@ -117,13 +117,14 @@ export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
         fontSize: "13px",
     };
 
+
     // ── Idle state ──────────────────────────────────────────────────────────────
     if (!vlmLoading && !vlmResult) {
         return (
             <aside style={panelStyle}>
                 <div style={headerStyle}>
                     <span style={{ fontWeight: 600, fontSize: "13px", color: "#f1f5f9" }}>
-                        GPT 4o - Output :
+                        VLM Output
                     </span>
                 </div>
                 <div
@@ -154,16 +155,10 @@ export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
     if (vlmLoading) {
         return (
             <aside style={panelStyle}>
-                <style>{`
-          @keyframes vlm-shimmer {
-            0%   { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-          }
-        `}</style>
                 <div style={headerStyle}>
                     <span style={{ fontSize: "16px" }}>🤖</span>
                     <span style={{ fontWeight: 600, fontSize: "13px", color: "#f1f5f9" }}>
-                        AI Vision Analysis
+                        VLM Output
                     </span>
                     <span
                         style={{
@@ -177,12 +172,6 @@ export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
                     </span>
                 </div>
                 <div style={bodyStyle}>
-                    <style>{`
-            @keyframes vlm-shimmer {
-              0%   { background-position: 200% 0; }
-              100% { background-position: -200% 0; }
-            }
-          `}</style>
                     <SkeletonLine width="60%" height="14px" mb="14px" />
                     <SkeletonLine width="100%" mb="6px" />
                     <SkeletonLine width="90%" mb="6px" />
@@ -212,20 +201,11 @@ export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
 
     return (
         <aside style={panelStyle}>
-            <style>{`
-        @keyframes vlm-shimmer {
-          0%   { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-        .vlm-label-row:hover {
-          background: rgba(255,255,255,0.04) !important;
-        }
-      `}</style>
 
             {/* Header */}
             <div style={headerStyle}>
                 <span style={{ fontWeight: 600, fontSize: "13px", color: "#f1f5f9" }}>
-                    GPT 4o - Output :
+                    VLM Output
                 </span>
                 {vlmMode === "region" && (
                     <Badge label="Region" color={CATEGORY_COLORS.reference} />
@@ -271,16 +251,20 @@ export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
                         {text_labels.map((label, i) => {
                             const cat = (label.category || "other").toLowerCase();
                             const color = CATEGORY_COLORS[cat] || CATEGORY_COLORS.other;
+                            const isMatchable = matchableLabels && matchableLabels.has(label.text?.toUpperCase());
                             return (
                                 <div
                                     key={i}
                                     className="vlm-label-row"
+                                    onClick={() => isMatchable && onLabelClick && onLabelClick(label.text, cat)}
                                     style={{
                                         padding: "7px 10px",
                                         borderRadius: "6px",
                                         background: color.bg,
                                         border: `1px solid ${color.border}`,
                                         transition: "background 0.15s",
+                                        cursor: isMatchable ? "pointer" : "default",
+                                        opacity: isMatchable ? 1 : 0.7,
                                     }}
                                 >
                                     <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
@@ -288,6 +272,11 @@ export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
                                             {label.text}
                                         </span>
                                         <Badge label={cat.replace("_", " ")} color={color} />
+                                        {isMatchable && (
+                                            <span title="Click to highlight on drawing" style={{ marginLeft: "auto", fontSize: "13px", cursor: "pointer" }}>
+                                                📍
+                                            </span>
+                                        )}
                                     </div>
                                     {label.explanation && (
                                         <div style={{ color: "#94a3b8", fontSize: "12px", lineHeight: 1.5 }}>
@@ -303,31 +292,44 @@ export default function VLMPanel({ vlmResult, vlmLoading, vlmMode }) {
                 {/* Detail Circles */}
                 <Section title={`Detail Circles (${detail_circles.length})`} isEmpty={detail_circles.length === 0}>
                     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                        {detail_circles.map((dc, i) => (
-                            <div
-                                key={i}
-                                style={{
-                                    padding: "7px 10px",
-                                    borderRadius: "6px",
-                                    background: "rgba(239,68,68,0.1)",
-                                    border: "1px solid rgba(239,68,68,0.3)",
-                                }}
-                            >
-                                <span style={{ fontWeight: 700, color: "#f87171" }}>
-                                    {dc.number}
-                                </span>
-                                {dc.page_reference && (
-                                    <span style={{ color: "#94a3b8", marginLeft: "6px" }}>
-                                        → {dc.page_reference}
-                                    </span>
-                                )}
-                                {dc.meaning && (
-                                    <div style={{ color: "#94a3b8", fontSize: "12px", marginTop: "3px" }}>
-                                        {dc.meaning}
+                        {detail_circles.map((dc, i) => {
+                            const hasPage = Boolean(dc.page_reference);
+                            return (
+                                <div
+                                    key={i}
+                                    onClick={() => hasPage && onCircleNavigate && onCircleNavigate(dc.page_reference, dc.number)}
+                                    style={{
+                                        padding: "7px 10px",
+                                        borderRadius: "6px",
+                                        background: "rgba(249,115,22,0.1)",
+                                        border: "1px solid rgba(249,115,22,0.3)",
+                                        cursor: hasPage ? "pointer" : "default",
+                                        transition: "background 0.15s",
+                                    }}
+                                >
+                                    <div style={{ display: "flex", alignItems: "center" }}>
+                                        <span style={{ fontWeight: 700, color: "#fb923c" }}>
+                                            {dc.number}
+                                        </span>
+                                        {dc.page_reference && (
+                                            <span style={{ color: "#94a3b8", marginLeft: "6px" }}>
+                                                → {dc.page_reference}
+                                            </span>
+                                        )}
+                                        {hasPage && (
+                                            <span title="Click to navigate to page" style={{ marginLeft: "auto", fontSize: "13px" }}>
+                                                🔗
+                                            </span>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                        ))}
+                                    {dc.meaning && (
+                                        <div style={{ color: "#94a3b8", fontSize: "12px", marginTop: "3px" }}>
+                                            {dc.meaning}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </Section>
 

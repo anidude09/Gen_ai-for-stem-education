@@ -1,135 +1,35 @@
 """
 llm.py
 
-This module defines a FastAPI router for interacting with a Large Language Model (LLM) 
-using the Groq API. 
-
-Key functionalities:
-- Accept user-provided text.
-- Query an LLM (LLaMA-3.1-8b-instant) via Groq.
-- Return a simplified explanation of the input text in less than 100 words.
+FastAPI router for LLMs. Uses the `construction_llm_explainer` package.
 """
 
+from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from groq import Groq
-import os
-from dotenv import load_dotenv
-import json
+
+from construction_llm_explainer import explain_term, build_drawing_context_str
 from services.rag_service import rag_service
 
-# Load environment variables from .env file
-load_dotenv()
-api_key = os.getenv("GROQ_API_KEY")
-
-# Initialize Groq client with API key
-client = Groq(api_key=api_key)
-
-# Initialize FastAPI router for LLM endpoints
 router = APIRouter()
 
-
 class LLMRequest(BaseModel):
-    """
-    Request model for generating simplified information from text.
-
-    Fields:
-        - content (str): The raw text content provided by the user.
-    """
     content: str
+    drawing_context: Optional[Dict[str, Any]] = None
 
-
-def generate_info_from_llm(text: str) -> str:
-    """
-    Sends the given text to the Groq LLM (LLaMA-3.3-70b-versatile) and requests a
-    concise, domain-aware explanation (construction) with light guardrails.
-
-    Optimisation: a single rag_service.get_term_entry() call is used to derive
-    both the RAG context string (instead of get_context) so the TERMS_LOOKUP
-    dict is only touched once per request.
-    """
-    # Single lookup — derive context from it directly
+def generate_info_from_llm_structured(text: str, drawing_context: dict = None) -> dict:
+    """Wrapper that resolves context through RAG before calling the LLM package."""
+    # RAG context resolution
     term_entry = rag_service.get_term_entry(text)
     if term_entry:
         page = term_entry.get("page", "N/A")
         definition = term_entry.get("definition", "")
-        context = f"--- Source: RSMeans Dictionary (Page {page}) ---\n{definition}"
-    else:
-        context = rag_service.get_context(text)
-
-    completion = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        temperature=0.2,
-        max_tokens=220,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a senior construction engineer and technical editor. "
-                    "Explain snippets from construction management/engineering research papers for an undergraduate civil engineering audience.\n"
-                    "Rules:\n"
-                    "1) Use only the provided text; do not invent facts.\n"
-                    "2) Preserve quantities/units; if units are imperial, also give SI in parentheses.\n"
-                    "3) Expand acronyms only if defined in the snippet; otherwise say 'not defined here'.\n"
-                    "4) If there is an equation, state what it calculates and define each variable present in the snippet.\n"
-                    "5) If the snippet is a figure/table caption, explain what it shows and the practical implication.\n"
-                    "6) If content is not about construction or lacks enough context, say so briefly and ask 1 clarifying question.\n"
-                    "7) Output 2\u20134 concise bullet points, total 60\u2013120 words.\n\n"
-                    f"Additional Context from Construction Dictionary:\n{context}"
-                )
-            },
-            {
-                "role": "user",
-                "content": f"Snippet:\n{text}"
-            }
-        ],
-    )
-    return completion.choices[0].message.content.strip()
-
-
-@router.post("/generate_info")
-async def generate_info_endpoint(request: LLMRequest):
-    """
-    FastAPI endpoint to generate simplified information from user text.
-
-    Steps:
-    1. Accept a POST request with JSON containing `content`.
-    2. Pass the content to the `generate_info_from_llm` function.
-    3. Return the simplified explanation in JSON format.
-    """
-    try:
-        info = generate_info_from_llm(request.content)
-        return {"info": info}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-def generate_info_from_llm_structured(text: str) -> dict:
-    """
-    Variant that requests a strict JSON response to support structured rendering.
-
-    Optimisation: a single rag_service.get_term_entry() call is used to derive
-    both context and image_path, eliminating the previous double lookup
-    (get_context + get_term_image each hit TERMS_LOOKUP separately).
-
-    Returns a dict with keys:
-      - summary: list[str]
-      - key_terms: list[{"term": str, "definition": str}]
-      - unit_conversions: list[{"original": str, "si": str}]
-      - clarifying_question: str
-    """
-    # Single dict lookup — derive both context and image_path from it
-    term_entry = rag_service.get_term_entry(text)
-    if term_entry:
-        page = term_entry.get("page", "N/A")
-        definition = term_entry.get("definition", "")
-        context = f"--- Source: RSMeans Dictionary (Page {page}) ---\n{definition}"
+        rag_context = f"--- Source: RSMeans Dictionary (Page {page}) ---\n{definition}"
         image_path = term_entry.get("image")
     else:
-        context = rag_service.get_context(text)
+        rag_context = rag_service.get_context(text)
         image_path = None
 
-    # Build image URL if we have a path
     image_url = None
     if image_path:
         if image_path.startswith("images/"):
@@ -137,111 +37,29 @@ def generate_info_from_llm_structured(text: str) -> dict:
         else:
             image_url = "/dict-images/" + image_path
 
-    print(f"[LLM] Image Path for frontend: {image_url}")
+    # Construct drawing context via package helper
+    drawing_context_str = build_drawing_context_str(drawing_context)
 
-    completion = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        temperature=0.2,
-        max_tokens=350,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are an instructor of a Construction Plan Reading course. "
-                    "You need to help undergraduate freshman students in the Construction "
-                    "Management program, who have no prior construction background, "
-                    "understand construction plans by providing clear and easy-to-understand explanations.\n\n"
-                    "Instructions:\n"
-                    "1. Use only the detected text or symbols, and interpret them within "
-                    "the context of a Construction Project.\n"
-                    "2. You may include general conventions typical in construction "
-                    "documents when the snippet consists only of a short label or title.\n"
-                    "3. Respond ONLY with a valid JSON object that matches the requested schema.\n"
-                    "4. Do not include any preface, explanation, or code fences.\n"
-                    "5. All explanations must be provided strictly from the Building/Housing "
-                    "Construction perspective.\n"
-                    "6. Use the provided 'Context from Dictionary' (if any) to act as an authoritative source.\n\n"
-                    "Schema (JSON keys):\n"
-                    '- summary: 2–3 bullets (plain language, 60–120 words total)\n'
-                    '- key_terms: array of {\"term\": str, \"definition\": str} only if defined in snippet\n'
-                    '- unit_conversions: array of {\"original\": str, \"si\": str} where applicable\n'
-                    "- clarifying_question: one question if context is insufficient, else empty string\n\n"
-                    "Constraints:\n"
-                    '- Expand acronyms only if defined in the snippet; else note "not defined here".\n'
-                    '- If not construction-related, set summary to ["Out of scope for construction"] '
-                    "and provide a clarifying_question.\n"
-                    '- If the snippet is very short (e.g., a sheet title such as "FIRST FLOOR PLAN"), '
-                    "treat it as a drawing/section label and explain its typical role in "
-                    "construction documents without assumptions specific to a particular "
-                    "construction project.\n"
-                    "- Output ONLY the JSON object. No additional text.\n\n"
-                    f"Context from Dictionary:\n{context}"
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    "Detected construction-plan text or symbol:\n"
-                    "```SNIPPET\n"
-                    f"{text}\n"
-                    "```\n\n"
-                    "Using the above snippet, generate the JSON object according to the "
-                    "schema and constraints in the system instructions."
-                ),
-            },
-        ],
+    # Call the LLM Explainer package directly
+    parsed = explain_term(
+        text=text,
+        rag_context=rag_context,
+        drawing_context_str=drawing_context_str
     )
-
-    raw = completion.choices[0].message.content.strip()
     
-    try:
-        parsed = json.loads(raw)
-        if isinstance(parsed, dict):
-            # Inject context so it can be displayed in frontend
-            parsed["context"] = context
-            # Inject image URL if available
-            if image_url:
-                parsed["dict_image"] = image_url
-            
-            print(f"[LLM] Final JSON keys: {list(parsed.keys())}")
-            return parsed
-    except Exception:
-        
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            try:
-                parsed = json.loads(raw[start:end+1])
-                if isinstance(parsed, dict):
-                    # Inject context so it can be displayed in frontend
-                    parsed["context"] = context
-                    # Inject image URL if available
-                    if image_url:
-                        parsed["dict_image"] = image_url
-                    return parsed
-            except Exception:
-                pass
-    # Fallback if the model didn't return valid JSON
-    result = {
-        "summary": [raw],
-        "key_terms": [],
-        "unit_conversions": [],
-        "clarifying_question": "",
-        "context": context
-    }
+    # Inject front-end specific keys (like images) that the generic package shouldn't know about
     if image_url:
-        result["dict_image"] = image_url
-    return result
-
+        parsed["dict_image"] = image_url
+        
+    return parsed
 
 @router.post("/generate_info_structured")
 async def generate_info_structured_endpoint(request: LLMRequest):
-    """
-    FastAPI endpoint to generate structured information from user text.
-    Returns a JSON object suitable for consistent UI rendering.
-    """
     try:
-        info = generate_info_from_llm_structured(request.content)
+        info = generate_info_from_llm_structured(
+            request.content,
+            drawing_context=request.drawing_context,
+        )
         return info
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

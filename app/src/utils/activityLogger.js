@@ -6,6 +6,8 @@
  * structured data about what the user was doing.
  */
 
+import { API_BASE_URL } from "../config";
+
 export async function logActivity({
   sessionId,
   eventType,
@@ -17,7 +19,7 @@ export async function logActivity({
   }
 
   try {
-    await fetch("http://localhost:8001/activity/log", {
+    await fetch(`${API_BASE_URL}/activity/log`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

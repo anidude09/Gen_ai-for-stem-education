@@ -11,8 +11,9 @@
 
 import { useState, useEffect } from "react";
 import { logActivity } from "../utils/activityLogger";
+import { API_BASE_URL } from "../config";
 
-function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }) {
+function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId, vlmResult }) {
   const [info, setInfo] = useState(null);
 
   // Log whenever a popup is opened for a selected shape
@@ -40,10 +41,17 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId }
       });
     }
 
-    fetch("http://localhost:8001/llm-images/explain_with_images", {
+    fetch(`${API_BASE_URL}/llm-images/explain_with_images`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: selectedShape.text || "Unlabeled text" }),
+      body: JSON.stringify({
+        content: selectedShape.text || "Unlabeled text",
+        drawing_context: vlmResult ? {
+          drawing_type: vlmResult.drawing_type,
+          summary: vlmResult.summary,
+          text_labels: vlmResult.text_labels,
+        } : null,
+      }),
     })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
