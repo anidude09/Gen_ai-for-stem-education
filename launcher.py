@@ -85,7 +85,7 @@ def _check_env_vars() -> CheckResult:
             load_dotenv(backend_env)
         
         missing = []
-        for key in ["GROQ_API_KEY", "GOOGLE_CSE_API_KEY", "GOOGLE_CSE_CX"]:
+        for key in ["OPENAI_API_KEY", "GOOGLE_CSE_API_KEY", "GOOGLE_CSE_CX"]:
             if not os.getenv(key):
                 missing.append(key)
                 

@@ -54,7 +54,7 @@ Gen_ai-for-stem-education/
 ├── packages/                    # Reusable Python packages
 │   ├── construction_ocr/        # PaddleOCR text detection pipeline
 │   ├── construction_circle_detector/  # OpenCV circle detection
-│   ├── construction_llm_explainer/    # Groq LLM explanation logic
+│   ├── construction_llm_explainer/    # GPT-4o LLM explanation logic
 │   ├── construction_plan_rag/         # RAG + dictionary term lookup
 │   └── construction_vlm_analyzer/     # GPT-4o Vision analysis
 ├── data/                        # Reference data (not in repo, see below)
