@@ -1,75 +1,73 @@
-
-# Frontend (Vite in app/)
-app/node_modules/
-app/dist/
-app/.vite/
-app/.env
-app/.env.local
-app/.env.*.local
-
-# Backend
-backend/.env
-backend/__pycache__/
-backend/*.pyc
-backend/routes/__pycache__/
-
-# RAG Data
-backend/chroma_db/
-
-# Bulk extraction tool (testing only)
-bulked_extract/input_images/
-bulked_extract/output/
-bulked_extract/temp_converted/
-
-experiments/
-
-RAG_TECHNICAL_OVERVIEW.html
-research_paper_content.txt
-
-
-stem/
-
-venv
-
-*.DS_Store
-
+# ──────────────────────────────────────────────
+# Python
+# ──────────────────────────────────────────────
+__pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
 
-RSMeans_Illustrated_Construction_Dictionary/
-docs/
-
-# Logs
-
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-node_modules
-dist
-dist-ssr
+# ──────────────────────────────────────────────
+# Node / Frontend
+# ──────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
 *.local
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
+# ──────────────────────────────────────────────
+# Environment & Secrets
+# ──────────────────────────────────────────────
+.env
+.env.*
+
+# ──────────────────────────────────────────────
+# Runtime / Generated Data
+# ──────────────────────────────────────────────
+*.db
+*.csv
+*.log
+backend/chroma_db/
+
+# ──────────────────────────────────────────────
+# Data files (kept locally, not on GitHub)
+# ──────────────────────────────────────────────
+data/
+*.pdf
+
+# ──────────────────────────────────────────────
+# Test / Sample Images (kept locally)
+# ──────────────────────────────────────────────
+Images/
+
+# ──────────────────────────────────────────────
+# Documentation (local reference only)
+# ──────────────────────────────────────────────
+docs/
+
+# ──────────────────────────────────────────────
+# IDE & Editor
+# ──────────────────────────────────────────────
+.idea/
+.vscode/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-*.xml
 *.iml
-.venv
 
-# Local documentation / diagrams (not for git)
-docs/system-diagram.mmd
-docs/system_prompts.txt
+# ──────────────────────────────────────────────
+# OS
+# ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
 
-*.pdf
-*.csv
-*.db
+# ──────────────────────────────────────────────
+# Misc
+# ──────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
