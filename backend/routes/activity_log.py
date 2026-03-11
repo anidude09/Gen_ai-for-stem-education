@@ -1,10 +1,4 @@
-"""
-activity_log.py
-
-Backend route for recording user activity events into a CSV log file.
-Each event is associated with a session ID so that activity can be
-traced back to a logged-in user.
-"""
+"""activity_log.py - Buffers and writes user activity events to CSV."""
 
 from datetime import datetime
 from pathlib import Path
@@ -20,20 +14,6 @@ router = APIRouter()
 
 
 class ActivityEvent(BaseModel):
-    """
-    Activity event sent from the frontend.
-
-    Fields:
-        - session_id: ID of the authenticated user session.
-        - event_type: Short string describing the type of event
-          (e.g., "login_success", "detect_full_image", "text_selected").
-        - event_data: Optional structured payload with additional details.
-        - user_name: Optional user name, if available.
-        - user_email: Optional user email, if available.
-        - timestamp_utc: Optional client-side timestamp. If omitted, the
-          server will use its current UTC time.
-    """
-
     session_id: str
     event_type: str
     event_data: Optional[Dict[str, Any]] = None
@@ -52,15 +32,10 @@ _LOG_FIELDNAMES = [
 ]
 
 
-# ── Performance: resolve path and create file once at module import ─────────
 _LOG_PATH: Path = Path(__file__).resolve().parent.parent / "activity_log.csv"
 
 
 def _ensure_log_file(path: Path) -> None:
-    """
-    Ensure the CSV log file exists and has a header row.
-    Called once at module import.
-    """
 
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,14 +44,10 @@ def _ensure_log_file(path: Path) -> None:
             writer.writeheader()
 
 
-# Initialise once at startup
 _ensure_log_file(_LOG_PATH)
 
 
-# ── Buffered CSV writer ────────────────────────────────────────────────────
-# Instead of opening/writing/closing the CSV file on every single event,
-# we collect events in a buffer and flush them in batch.  This reduces
-# file I/O from N open/write/close cycles to ~N/10.
+# Buffered CSV writer — flushes every 5s or every 10 events
 import threading
 import atexit
 
@@ -87,7 +58,6 @@ _FLUSH_THRESHOLD = 10       # flush when N events are buffered
 
 
 def _flush_log_buffer() -> None:
-    """Write all buffered rows to disk in a single file-open."""
     with _LOG_LOCK:
         if not _LOG_BUFFER:
             return
@@ -101,26 +71,21 @@ def _flush_log_buffer() -> None:
 
 
 def _periodic_flush():
-    """Background timer thread: flushes the buffer every _FLUSH_INTERVAL seconds."""
     _flush_log_buffer()
     _timer = threading.Timer(_FLUSH_INTERVAL, _periodic_flush)
     _timer.daemon = True
     _timer.start()
 
 
-# Start the background flush timer
+
 _periodic_flush()
 
-# Ensure remaining events are written on shutdown
+
 atexit.register(_flush_log_buffer)
 
 
 @router.post("/activity/log", tags=["Activity"])
 async def log_activity(event: ActivityEvent) -> dict:
-    """
-    Buffer a single activity event.  Events are flushed to the CSV file
-    every 5 seconds or every 10 events, whichever comes first.
-    """
 
     timestamp = event.timestamp_utc or datetime.utcnow()
 

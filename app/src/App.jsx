@@ -12,8 +12,7 @@ import { API_BASE_URL } from "./config";
 import "./styles/App.css";
 
 function MainPage() {
-  // Workspace views state dictionary
-  // Keys are "main" or "detail". We store all detection arrays and layout info here.
+  // Workspace state for main and detail sheet views
   const [views, setViews] = useState({
     main: {
       imageUrl: null,
@@ -41,10 +40,10 @@ function MainPage() {
     }
   });
 
-  // Which "tab" is active in the workspace: "main" or "detail"
+  // Active tab: "main" or "detail"
   const [activeView, setActiveView] = useState("main");
 
-  // Helper to update a single view's state
+
   const updateView = (viewName, updates) => {
     setViews((prev) => ({
       ...prev,
@@ -52,10 +51,10 @@ function MainPage() {
     }));
   };
 
-  // We expose a setter for the main imageUrl to stick with the existing ImageUploader contract
+
   const setImageUrl = (url) => updateView("main", { imageUrl: url });
 
-  // Helper to check if a specific view is currently valid and ready for operations
+
   const isViewValid = (viewStr) => Boolean(views[viewStr]);
 
   const [user, setUser] = useState(() => {
@@ -76,34 +75,29 @@ function MainPage() {
     }
   });
 
-  // VLM (GPT-4o Vision) side-panel state
+  // VLM (GPT-4o Vision) panel state
   const [vlmResult, setVlmResult] = useState(null);
   const [vlmLoading, setVlmLoading] = useState(false);
   const [vlmMode, setVlmMode] = useState(null); // "full" | "region"
   const [vlmPanelOpen, setVlmPanelOpen] = useState(true); // Toggle for right panel
 
-  // VLM label → drawing text linking
+
   const [highlightedTextBox, setHighlightedTextBox] = useState(null); // {id, category}
 
   const imgRef = useRef(null);
   const detailImgRef = useRef(null);
 
-  // Shared logout hook
+
   const handleLogout = useLogout(sessionId, setUser, setSessionId, setImageUrl);
 
-  // Auto logout (inactivity + tab close)
+  // Auto logout after 5 min inactivity
   useautoLogout(sessionId, handleLogout, 50 * 10 * 1000);
 
-  // Zoom state - now managed at App level to put controls in header
+
   const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
 
   /**
-   * handleVlmDetect — called by ImageCanvas when the user clicks Detect or
-   * Detect in Selection.  Fires in parallel with the CV pipeline so the canvas
-   * overlays appear promptly while GPT-4o thinks in the background.
-   *
-   * @param {Blob}  imageBlob  — the raw image file blob
-   * @param {Object|null} cropParams — {x, y, w, h} in natural image pixels, or null for full image
+   * Fires GPT-4o Vision analysis in parallel with CV pipeline.
    */
   const handleVlmDetect = async (imageBlob, cropParams = null) => {
     setVlmResult(null);
@@ -144,7 +138,7 @@ function MainPage() {
     }
   };
 
-  // Handle navigation from a circle to a specific page (e.g., A5.1)
+  // Navigate from a circle to a detail page
   const handleNavigateToPage = (pageImageUrl, pageNumber, circleText) => {
     console.log("Opening detail sheet from MainPage:", {
       pageImageUrl,
@@ -169,8 +163,8 @@ function MainPage() {
     setActiveView("detail");
   };
 
-  // ── VLM label → PaddleOCR text matching ──────────────────────────────────
-  // Build a set of VLM label texts that have a matching PaddleOCR text box
+  // ── VLM label → PaddleOCR text matching ──────────────────────
+  // Find VLM labels that have a matching PaddleOCR text box on canvas
   const matchableLabels = useMemo(() => {
     const vlmLabels = vlmResult?.text_labels || [];
     const ocrTexts = views[activeView]?.rawTexts || [];
@@ -193,42 +187,36 @@ function MainPage() {
     return matchable;
   }, [vlmResult, views, activeView]);
 
-  // When user clicks a VLM label, find matching PaddleOCR text box
+  // Highlight matching PaddleOCR box when user clicks a VLM label
   const handleVlmLabelClick = (labelText, category) => {
     const target = (labelText || "").toUpperCase().trim();
     if (!target) return;
 
     const ocrTexts = views[activeView]?.rawTexts || [];
-
-    // 1. Exact match
+    // Exact match
     let match = ocrTexts.find(t => (t.text || "").toUpperCase().trim() === target);
-
-    // 2. OCR text contains VLM label
+    // OCR text contains VLM label
     if (!match) {
       match = ocrTexts.find(t => (t.text || "").toUpperCase().trim().includes(target));
     }
-
-    // 3. VLM label contains OCR text
+    // VLM label contains OCR text
     if (!match) {
       match = ocrTexts.find(t => {
         const ocrText = (t.text || "").toUpperCase().trim();
         return ocrText.length >= 2 && target.includes(ocrText);
       });
     }
-
     if (match) {
-      const currentImageInfo = views[activeView]?.imageInfo;
       // Scale to display coordinates
       const scaled = {
         ...match,
-        x1: match.x1 * (currentImageInfo?.scaleX || 1),
-        y1: match.y1 * (currentImageInfo?.scaleY || 1),
-        x2: match.x2 * (currentImageInfo?.scaleX || 1),
-        y2: match.y2 * (currentImageInfo?.scaleY || 1),
+        x1: match.x1 * (views[activeView]?.imageInfo?.scaleX || 1),
+        y1: match.y1 * (views[activeView]?.imageInfo?.scaleY || 1),
+        x2: match.x2 * (views[activeView]?.imageInfo?.scaleX || 1),
+        y2: match.y2 * (views[activeView]?.imageInfo?.scaleY || 1),
       };
       setHighlightedTextBox({ ...scaled, category });
 
-      // Auto-clear highlight after 4 seconds
       setTimeout(() => setHighlightedTextBox(null), 4000);
     } else {
       console.log(`[VLM] No PaddleOCR match for "${labelText}"`);
@@ -236,8 +224,7 @@ function MainPage() {
     }
   };
 
-  // When the detail image + its layout info are ready and we know the
-  // target circle text, automatically run detection and highlight circles.
+  // Auto-detect circles on detail sheet when ready
   useEffect(() => {
     const detail = views.detail;
     const shouldDetect = detail.imageUrl && detail.imageInfo && detail.targetCircleText;

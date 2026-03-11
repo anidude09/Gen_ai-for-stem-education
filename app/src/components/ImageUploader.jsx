@@ -1,11 +1,4 @@
-/**
- * ImageUploader.jsx
- *
- * This component provides a file input to upload an image.
- * - When a user selects an image, it creates a temporary object URL
- * - Updates the parent component with the new image URL
- * - Resets any existing detection/overlay states to start fresh
- */
+// ImageUploader — file input for uploading a drawing image
 function ImageUploader({ setImageUrl, resetStates }) {
   const handleUpload = (e) => {
     const file = e.target.files[0];
@@ -18,13 +11,13 @@ function ImageUploader({ setImageUrl, resetStates }) {
 
   return (
     <label className="upload-btn-wrapper">
-        <span className="upload-btn-text">Upload Image</span>
-        <input
-            type="file"
-            accept="image/*"
-            onChange={handleUpload}
-            className="file-input-hidden"
-        />
+      <span className="upload-btn-text">Upload Image</span>
+      <input
+        type="file"
+        accept="image/*"
+        onChange={handleUpload}
+        className="file-input-hidden"
+      />
     </label>
   );
 }

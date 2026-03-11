@@ -1,10 +1,4 @@
-/**
- * activityLogger.js
- *
- * Lightweight helper for sending user activity events to the backend.
- * All events are associated with a session ID and can include arbitrary
- * structured data about what the user was doing.
- */
+// activityLogger — sends user activity events to the backend for logging
 
 import { API_BASE_URL } from "../config";
 

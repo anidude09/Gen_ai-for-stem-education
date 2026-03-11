@@ -1,14 +1,4 @@
-/**
- * Page.jsx
- *
- * This component displays a single page image and highlights a specific circle on it.
- * - Reads query parameters `image` (page image URL) and `circle` (circle text to highlight)
- * - Loads the image and calculates scale info for proper overlays
- * - Sends the image to the backend detection API to get all circles
- * - Finds the circle that matches the target text and highlights it
- * - Supports zooming via buttons and mouse wheel
- */
-
+// Page — displays a single page image and highlights a target circle on it
 
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -16,7 +6,6 @@ import ZoomControls from "./ZoomControls";
 import useZoom from "../hooks/useZoom";
 import { API_BASE_URL } from "../config";
 import "../styles/zoom.css";
-import ImageUploader from "./ImageUploader"; // Ensure this is imported if we use it directly here or nearby
 
 function Page() {
   const [searchParams] = useSearchParams();
@@ -137,7 +126,7 @@ function Page() {
               }}
             />
 
-            {/* Circle overlay */}
+
             {scaledCircle && (
               <svg
                 width={imageInfo?.clientWidth || 0}

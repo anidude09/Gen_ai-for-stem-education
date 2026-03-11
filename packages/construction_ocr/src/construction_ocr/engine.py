@@ -1,11 +1,4 @@
-"""
-engine.py — PaddleOCR singleton and core OCR functions.
-
-Handles:
-- Lazy-loaded PaddleOCR singleton (thread-safe)
-- Single-image OCR
-- Tiled OCR for large images (>4000px) with dedup
-"""
+"""engine.py - PaddleOCR singleton, core OCR, and tiled OCR for large images."""
 
 from __future__ import annotations
 
@@ -14,14 +7,13 @@ import cv2
 import numpy as np
 
 
-# ── PaddleOCR singleton (lazy, thread-safe) ───────────────────────────────
+# PaddleOCR singleton (lazy, thread-safe)──────
 
 _PADDLE_OCR = None
 _PADDLE_OCR_LOCK = threading.Lock()
 
 
 def get_paddle_ocr():
-    """Return the PaddleOCR singleton, initializing it on first call."""
     global _PADDLE_OCR
     if _PADDLE_OCR is not None:
         return _PADDLE_OCR
@@ -50,7 +42,7 @@ def get_paddle_ocr():
     return _PADDLE_OCR
 
 
-# ── Configuration ─────────────────────────────────────────────────────────
+# Configuration
 
 OCR_MIN_CONFIDENCE = 0.30
 TILE_SIZE     = 4000
@@ -58,13 +50,7 @@ TILE_OVERLAP  = 200
 TILE_THRESHOLD = 4000
 
 
-# ── Core OCR ──────────────────────────────────────────────────────────────
-
 def run_paddle_ocr(img_bgr: np.ndarray) -> list[tuple]:
-    """
-    Run PaddleOCR on a BGR image.  Returns list of (bbox, text, conf).
-    bbox is [[x1,y1],[x2,y2],[x3,y3],[x4,y4]].
-    """
     ocr = get_paddle_ocr()
     if ocr is None:
         print("[construction_ocr] PaddleOCR not available")
@@ -104,10 +90,7 @@ def run_paddle_ocr(img_bgr: np.ndarray) -> list[tuple]:
     return results
 
 
-# ── Box IoU ───────────────────────────────────────────────────────────────
-
 def box_iou(box_a: tuple, box_b: tuple) -> float:
-    """Intersection-over-Union for two (x_min, y_min, x_max, y_max) boxes."""
     xa = max(box_a[0], box_b[0])
     ya = max(box_a[1], box_b[1])
     xb = min(box_a[2], box_b[2])
@@ -119,15 +102,7 @@ def box_iou(box_a: tuple, box_b: tuple) -> float:
     return inter / union if union > 0 else 0
 
 
-# ── Tiled OCR ─────────────────────────────────────────────────────────────
-
 def run_paddle_ocr_tiled(img_bgr: np.ndarray) -> list[tuple]:
-    """
-    Run PaddleOCR with tiling for large images.
-    Splits the image into overlapping tiles, runs OCR on each,
-    offsets coordinates back to global space, and deduplicates.
-    For small images, falls back to single-pass OCR.
-    """
     h, w = img_bgr.shape[:2]
 
     if max(h, w) <= TILE_THRESHOLD:
@@ -155,7 +130,7 @@ def run_paddle_ocr_tiled(img_bgr: np.ndarray) -> list[tuple]:
     if not all_results:
         return all_results
 
-    # Deduplicate: sort by confidence descending, keep higher-confidence
+    # Dedup: keep higher-confidence boxes, discard overlapping lower-confidence
     all_results.sort(key=lambda r: r[2], reverse=True)
     keep = []
     for pts, text, conf in all_results:

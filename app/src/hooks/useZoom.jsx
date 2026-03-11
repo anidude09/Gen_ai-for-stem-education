@@ -1,12 +1,4 @@
-/**
- * useZoom.js
- *
- * This custom React hook manages zoom functionality for UI elements such as images.
- * - Allows zooming in, zooming out, and setting exact zoom levels.
- * - Supports zoom via buttons, keyboard shortcuts (Ctrl/Cmd + +, -, 0), and mouse wheel.
- * - Enforces minimum and maximum zoom limits and configurable zoom step.
- */
-
+// useZoom — zoom state with keyboard shortcuts (Ctrl +/-/0) and mouse wheel support
 
 import { useState, useEffect } from "react";
 
