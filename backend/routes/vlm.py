@@ -90,6 +90,7 @@ async def vlm_analyze(
     w: Optional[int] = Form(None),
     h: Optional[int] = Form(None),
     session_id: Optional[str] = Form(None),
+    detail_context: Optional[str] = Form(None),
 ):
     try:
         from io import BytesIO
@@ -107,7 +108,7 @@ async def vlm_analyze(
             mode = "region"
 
         # DELEGATE TO VLM ANALYZER PACKAGE
-        result = analyze_drawing(img, crop_region=crop_region)
+        result = analyze_drawing(img, crop_region=crop_region, detail_context=detail_context)
 
         # Logging
         analysis = result["analysis"]

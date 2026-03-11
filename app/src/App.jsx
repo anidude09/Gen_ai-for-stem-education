@@ -99,7 +99,7 @@ function MainPage() {
   /**
    * Fires GPT-4o Vision analysis in parallel with CV pipeline.
    */
-  const handleVlmDetect = async (imageBlob, cropParams = null) => {
+  const handleVlmDetect = async (imageBlob, cropParams = null, detailContext = null) => {
     setVlmResult(null);
     setVlmLoading(true);
     setVlmMode(cropParams ? "region" : "full");
@@ -112,6 +112,9 @@ function MainPage() {
       formData.append("y", String(Math.round(cropParams.y)));
       formData.append("w", String(Math.round(cropParams.w)));
       formData.append("h", String(Math.round(cropParams.h)));
+    }
+    if (detailContext) {
+      formData.append("detail_context", detailContext);
     }
 
     try {
@@ -235,6 +238,13 @@ function MainPage() {
         const blob = await fetch(detail.imageUrl).then((res) => res.blob());
         const formData = new FormData();
         formData.append("file", blob, "detail.png");
+
+        // Fire VLM analysis for this detail page in parallel
+        const detailContext = `The student navigated here by clicking detail circle "${detail.targetCircleText}" on the main drawing` +
+          (detail.pageLabel ? ` (page ${detail.pageLabel})` : "");
+        handleVlmDetect(blob, null, detailContext).catch((err) =>
+          console.warn("Detail VLM error:", err)
+        );
 
         const resp = await fetch(`${API_BASE_URL}/detect/`, {
           method: "POST",

@@ -32,19 +32,10 @@ def get_openai_client():
 
 def analyze_drawing(
     img: Image.Image,
-    crop_region: Optional[tuple[int, int, int, int]] = None
+    crop_region: Optional[tuple[int, int, int, int]] = None,
+    detail_context: Optional[str] = None,
 ) -> dict:
-    """
-    Analyze a structural/construction drawing with GPT-4o Vision.
-    
-    Args:
-        img: A PIL Image of the drawing.
-        crop_region: Optional (x, y, w, h) to crop the image before analysis.
-    
-    Returns:
-        dict: A structured dictionary containing the analysis, plus metadata
-              like raw response string and token usage.
-    """
+    """Analyze a construction drawing with GPT-4o Vision."""
     client = get_openai_client()
 
     if crop_region is not None:
@@ -56,6 +47,15 @@ def analyze_drawing(
     img_resized = resize_for_vlm(img)
     base64_img = encode_image(img_resized)
 
+    # Build user message — add detail context if navigating from a circle
+    user_text = "Analyze this drawing. Return ONLY pure JSON mapping to the requested schema. Do not use markdown backticks."
+    if detail_context:
+        user_text += (
+            f"\n\nContext: {detail_context}. "
+            "Focus your analysis on explaining what this detail page shows "
+            "and how it relates to the referenced detail circle from the main drawing."
+        )
+
     print(f"[vlm_analyzer] Calling GPT-4o Vision (size={img_resized.size})")
 
     response = client.chat.completions.create(
@@ -65,10 +65,7 @@ def analyze_drawing(
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "text",
-                        "text": "Analyze this drawing. Return ONLY pure JSON mapping to the requested schema. Do not use markdown backticks."
-                    },
+                    {"type": "text", "text": user_text},
                     {
                         "type": "image_url",
                         "image_url": {
@@ -88,7 +85,6 @@ def analyze_drawing(
 
     parsed_json = parse_vlm_response(raw_response)
     
-    # Return structured output along with usage metadata for backend logging
     return {
         "analysis": parsed_json,
         "metadata": {
@@ -97,3 +93,4 @@ def analyze_drawing(
             "raw_response": raw_response
         }
     }
+
