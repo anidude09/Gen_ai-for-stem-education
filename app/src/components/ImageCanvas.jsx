@@ -1,15 +1,4 @@
-/**
- * ImageCanvas.jsx
- *
- * This component is responsible for:
- * - Displaying an uploaded image
- * - Sending the image to a backend for text/shape detection
- * - Scaling the returned coordinates to match the displayed image
- * - Rendering overlays for detected circles/texts
- * - Allowing zoom in/out (via buttons and scroll wheel)
- * - Showing a popup when a shape is selected
- */
-
+// ImageCanvas — displays uploaded image, runs detection, renders shape overlays and popups
 
 import React, { useRef, useState } from "react";
 import ShapeOverlay from "./ShapeOverlay";
@@ -41,13 +30,11 @@ function ImageCanvas({
   zoomOut,
   highlightCircleText,
   hideControls,
-  onVlmDetect,           // NEW: fires GPT-4o Vision analysis in parallel
+  onVlmDetect,
   highlightedTextBox,     // {id, category} of text box to highlight from VLM click
   vlmResult,              // VLM analysis for drawing context in explanations
 }) {
   const wrapperRef = useRef(null);
-  // Zoom is now managed by parent (App.jsx) or context, passed in as prop
-  // const { zoom, zoomIn, zoomOut, handleWheel } = useZoom({ min: 1, max: 3, step: 0.25 });
 
   const [isDetecting, setIsDetecting] = useState(false);
   const [selection, setSelection] = useState(null);
@@ -56,8 +43,6 @@ function ImageCanvas({
 
   const handleImageLoad = async () => {
     if (!imgRef.current) return;
-
-    // ... existing code ...
 
     const info = {
       naturalWidth: imgRef.current.naturalWidth,
@@ -71,7 +56,7 @@ function ImageCanvas({
     setLoaded(true);
   };
 
-  // ... (rest of detection logic remains same) ...
+
 
   const runDetection = async () => {
     try {
@@ -85,15 +70,13 @@ function ImageCanvas({
       const formData = new FormData();
       formData.append("file", blob, "image.png");
 
-      // Fire VLM analysis in parallel — does NOT block the CV pipeline.
-      // The VLM result will update the right panel whenever GPT-4o responds.
+      // Fire VLM analysis in parallel (non-blocking)
       if (onVlmDetect) {
         onVlmDetect(blob, null).catch((err) =>
           console.warn("VLM fire-and-forget error:", err)
         );
       }
 
-      // Log the user explicitly starting a full-image detection
       logActivity({
         sessionId,
         eventType: "detect_full_image_start",
@@ -192,7 +175,6 @@ function ImageCanvas({
       formData.append("w", String(w));
       formData.append("h", String(h));
 
-      // Fire VLM region analysis in parallel
       if (onVlmDetect) {
         onVlmDetect(blob, { x, y, w, h }).catch((err) =>
           console.warn("VLM region fire-and-forget error:", err)
@@ -246,6 +228,7 @@ function ImageCanvas({
       console.error(err);
     } finally {
       setIsDetecting(false);
+      setSelection(null); // Clear selection so the dark overlay goes away
     }
   };
 

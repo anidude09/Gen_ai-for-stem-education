@@ -1,11 +1,4 @@
-/**
- * LoginForm.jsx
- *
- * This component renders a login form where a user enters their name and email.
- * - On submit, it sends the credentials to the backend login API.
- * - If successful, it stores the user info and session ID in the parent state.
- * - Handles loading state and displays error messages if login fails.
- */
+// LoginForm — login form with name/email, creates a backend session
 
 
 import { useState } from "react";

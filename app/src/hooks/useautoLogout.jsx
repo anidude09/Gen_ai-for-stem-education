@@ -5,11 +5,13 @@
  * - Tracks user activity (mouse movement, clicks, key presses, scrolling).
  * - Resets the inactivity timer on any interaction.
  * - Calls the provided handleLogout function if the user is inactive for the specified timeout.
- * - Also logs out the user when the window is closed or refreshed.
+ * - On page close/refresh, sends a best-effort beacon to the backend but does NOT
+ *   clear sessionStorage, so a simple page refresh keeps the user logged in.
  */
 
 import { useEffect } from "react";
 import { logActivity } from "../utils/activityLogger";
+import { API_BASE_URL } from "../config";
 
 export default function useAutoLogout(sessionId, handleLogout, timeout) {
   useEffect(() => {
@@ -34,10 +36,21 @@ export default function useAutoLogout(sessionId, handleLogout, timeout) {
     window.addEventListener("click", resetTimer);
     window.addEventListener("scroll", resetTimer);
 
-    const handleUnload = () => handleLogout();
+    // On page close/refresh: notify the backend but do NOT clear session storage.
+    // navigator.sendBeacon is fire-and-forget — it works even during page unload.
+    // This way, refreshing the page keeps the user logged in.
+    const handleUnload = () => {
+      navigator.sendBeacon(
+        `${API_BASE_URL}/auth/logout`,
+        new Blob(
+          [JSON.stringify({ session_id: sessionId })],
+          { type: "application/json" }
+        )
+      );
+    };
     window.addEventListener("beforeunload", handleUnload);
 
-    resetTimer(); 
+    resetTimer();
 
     return () => {
       clearTimeout(timer);

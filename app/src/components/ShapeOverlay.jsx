@@ -1,12 +1,4 @@
-/**
- * ShapeOverlay.jsx
- *
- * SVG overlay on top of the drawing image to visually highlight:
- * - Detected circles (coral/orange, lighter)
- * - Blue pulsing circle for highlighted target circle
- * - Green rects for detected text boxes (hidden if inside a circle)
- * - Category-colored pulsing rects for VLM-linked text highlights
- */
+// ShapeOverlay — SVG overlay for detected circles, text boxes, and selection region
 
 import React from "react";
 
@@ -94,12 +86,10 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, high
       }}
     >
       <defs>
-        {/* Mask that hides the dark wash where the user is selecting */}
+        {/* Mask cuts a hole in the dark wash for the selection region */}
         {selection && (
           <mask id="selection-mask">
-            {/* White = fully opaque mask (show dark wash) */}
             <rect x="0" y="0" width={imageInfo.clientWidth} height={imageInfo.clientHeight} fill="white" />
-            {/* Black = fully transparent mask (cut a hole for the selection) */}
             <rect
               x={selection.x1}
               y={selection.y1}
@@ -111,7 +101,7 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, high
         )}
       </defs>
 
-      {/* Dark wash over the entire image, with a hole cut out for the selection context */}
+      {/* Dark wash over image except the selected area */}
       {selection && (
         <rect
           x="0"
@@ -124,7 +114,7 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, high
         />
       )}
 
-      {/* Pulsing highlight ring behind the target circle */}
+      {/* Target circle highlight */}
       {circles.filter(isCircleHighlighted).map((c) => (
         <circle
           key={`highlight-${c.id}`}
@@ -156,7 +146,7 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, high
         );
       })}
 
-      {/* Pulsing highlight behind the VLM-linked text box */}
+      {/* VLM-linked text highlight */}
       {highlightedTextBox && visibleTexts.filter(isTextHighlighted).map((t) => (
         <rect
           key={`text-highlight-${t.id}`}

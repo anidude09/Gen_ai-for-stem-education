@@ -1,13 +1,4 @@
-/**
- * Popup.jsx
- *
- * This component displays a popup box with information about a selected shape (circle or text).
- * - For circles: shows page number and circle text, with a button to navigate to the corresponding page.
- * - For text: fetches additional info from the LLM backend and displays it.
- * - Supports zoomed image coordinates without scaling the popup itself.
- * - Provides a close button to dismiss the popup.
- */
-
+// Popup — shows info for a selected shape (circle navigation or LLM text explanation)
 
 import { useState, useEffect } from "react";
 import { logActivity } from "../utils/activityLogger";
@@ -16,7 +7,7 @@ import { API_BASE_URL } from "../config";
 function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId, vlmResult }) {
   const [info, setInfo] = useState(null);
 
-  // Log whenever a popup is opened for a selected shape
+
   useEffect(() => {
     if (!selectedShape || !sessionId) return;
 
@@ -29,7 +20,6 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId, 
   }, [selectedShape, sessionId]);
 
   useEffect(() => {
-    // Only fetch explanation + images when a TEXT selection is active
     if (!selectedShape || selectedShape.r) return;
     setInfo("Loading...");
 
@@ -66,15 +56,13 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId, 
 
   if (!selectedShape) return null;
 
-  // Handle navigation from a circle popup to the corresponding detail page
+
   const handleRedirect = (e, pageNumber, circleText) => {
     e.preventDefault();
     e.stopPropagation();
 
     if (!pageNumber || !onNavigateToPage) return;
 
-    // The backend serves static page images from /images (see backend/app.py).
-    // Example files: A3.1.png, A5.1.png, A8.1.png, etc.
     const imagePath = `/images/${pageNumber}.png`;
 
     if (sessionId) {
@@ -92,13 +80,7 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId, 
     onClose();
   };
 
-  // ✅ Coordinates logic updated:
-  // Since the popup is inside a scaled container, we normally would NOT multiply by zoom.
-  // However, we want the popup to stay visually close to the element, but NOT scale its text size.
-  // Strategy:
-  // 1. Position it at the raw shape coordinates (since parent is scaled).
-  // 2. Counter-scale the popup itself (scale(1/zoom)) so text stays normal size.
-  // 3. Add a small offset that scales inversely to keep distance constant visually.
+  // Position popup near the shape, counter-scale so text stays readable
 
   const rawLeft = selectedShape.r
     ? selectedShape.x + selectedShape.r + 10
@@ -108,9 +90,7 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId, 
     ? selectedShape.y - selectedShape.r / 2
     : selectedShape.y1;
 
-  // Determine the effective page number for navigation
-  // Prefer the explicit 'page_number' field (from bottom text).
-  // If missing, check if 'circle_text' looks like a page number (e.g., "A5.1").
+  // Use page_number if available, otherwise try parsing circle_text as page ref
   let navPage = selectedShape.page_number;
   if (!navPage && selectedShape.circle_text && /^[A-Z]\d+(\.\d+)?$/i.test(selectedShape.circle_text)) {
     navPage = selectedShape.circle_text.toUpperCase();
@@ -128,7 +108,7 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId, 
         transform: `scale(${1 / zoom})`,
         transformOrigin: "top left",
 
-        // Updated UI: Dark, translucent, glassy
+
         backgroundColor: "rgba(30, 41, 59, 0.85)", // Dark slate
         border: "1px solid rgba(255, 255, 255, 0.2)",
         borderRadius: "12px",
@@ -191,7 +171,7 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId, 
             )}
           </ul>
 
-          {/* Debug info omitted for cleaner UI, or can be kept hidden */}
+
 
           <button
             onClick={onClose}
@@ -313,7 +293,7 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId, 
 
               )}
 
-              {/* RAG Context Section */}
+
               {info.context && (
                 <div style={{ marginTop: "16px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "12px" }}>
                   <details style={{ cursor: "pointer" }}>
