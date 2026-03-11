@@ -1,0 +1,31 @@
+services:
+  stem-ai:
+    build: .
+    container_name: stem-ai-app
+    ports:
+      - "8001:8001"
+
+    # API keys from .env file
+    env_file:
+      - .env
+
+    # Mount local data/ folder (PDFs, terms, dictionary images)
+    volumes:
+      - ./data:/app/data
+      - chroma_db:/app/backend/chroma_db
+
+    # GPU support (requires NVIDIA Container Toolkit)
+    # Remove this section to run on CPU only
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    restart: unless-stopped
+
+volumes:
+  chroma_db:
+    driver: local

@@ -1,0 +1,40 @@
+# Git
+.git
+.gitattributes
+.gitignore
+
+# Python
+.venv/
+__pycache__
+*.pyc
+*.egg-info
+
+# Node
+app/node_modules/
+app/dist/
+
+# Data (mounted as volume)
+data/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+.DS_Store
+
+# Docs / Images (not needed in container)
+docs/
+Images/
+
+# SQLite DB (recreated at runtime)
+sessions.db
+backend/activity_log.csv
+backend/vlm_log.csv
+backend/chroma_db/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
