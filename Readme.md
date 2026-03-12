@@ -1,8 +1,14 @@
 # Gen AI for STEM Education
 
+# Intro (Use the paper intro and methodology here)
+
+# paper pdf
+
+
 An AI-powered tool that helps students learn from construction plan drawings. Upload a construction drawing, and the app will detect text, identify symbols, and explain what everything means using OpenAI's GPT-4o — all in a simple web interface.
 
-## What It Does
+## What It Does 
+# Methodology (Add the bigger figure you made there with text to explain. This could be combined with the content below)
 
 1. **OCR Text Detection** — Uses PaddleOCR to find and read text labels on construction drawings
 2. **Circle/Symbol Detection** — Identifies circled callouts and reference symbols using OpenCV
@@ -186,7 +192,7 @@ The launcher will:
 2. Start the backend server at `http://127.0.0.1:8001`
 3. Open the app in your default browser
 
-## How It Works
+## How It Works (instruction with screenshot to show how to use it for people who are using this for the first time)
 
 When you upload a construction drawing:
 
