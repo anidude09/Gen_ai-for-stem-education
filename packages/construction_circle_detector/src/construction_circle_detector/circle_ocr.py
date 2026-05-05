@@ -102,7 +102,8 @@ def ocr_single_circle(
     - Detail bubble (has_hline=True):  number on top, page ref on bottom
     - Section marker (has_hline=False): just a number centered inside
     """
-    pad = 5
+    # Generous padding so text near the rim isn't clipped
+    pad = max(20, int(r * 0.4))
     top    = max(y - r - pad, 0)
     bottom = min(y + r + pad, img.shape[0])
     left   = max(x - r - pad, 0)
@@ -111,23 +112,35 @@ def ocr_single_circle(
 
     gray_crop = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
 
+    # Step 1 — upscale grayscale first so adaptive threshold works on more pixels
+    scale = 5.0 if r < 55 else 3.0
+    h_g, w_g = gray_crop.shape[:2]
+    if h_g > 0 and w_g > 0:
+        gray_crop = cv2.resize(gray_crop, None, fx=scale, fy=scale,
+                               interpolation=cv2.INTER_CUBIC)
+
+    # Step 2 — adaptive threshold on the larger image (blockSize scales with upscale)
+    block = max(11, int(15 * scale) | 1)  # must be odd
     binary = cv2.adaptiveThreshold(
         gray_crop, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 15, 8
+        cv2.THRESH_BINARY, block, 8
     )
 
-    crop_for_ocr = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
+    # Step 3 — circular mask: blank out pixels outside the circle so external
+    # text on the drawing doesn't pollute the OCR split logic
+    h_b, w_b = binary.shape[:2]
+    left_orig = max(x - r - pad, 0)
+    top_orig  = max(y - r - pad, 0)
+    cx_s = int((x - left_orig) * scale)
+    cy_s = int((y - top_orig)  * scale)
+    r_s  = int(r * scale)
+    mask = np.zeros((h_b, w_b), dtype=np.uint8)
+    cv2.circle(mask, (cx_s, cy_s), r_s + int(pad * scale * 0.5), 255, -1)
+    binary = cv2.bitwise_and(binary, binary, mask=mask)
+    # Restore white background outside mask so OCR sees clean margins
+    binary[mask == 0] = 255
 
-    scale = 5.0 if r < 55 else 3.0
-    try:
-        h_c2, w_c2 = crop_for_ocr.shape[:2]
-        if h_c2 > 0 and w_c2 > 0:
-            crop_for_ocr = cv2.resize(
-                crop_for_ocr, None, fx=scale, fy=scale,
-                interpolation=cv2.INTER_CUBIC,
-            )
-    except Exception:
-        pass
+    crop_for_ocr = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
 
     top_texts: list[str] = []
     bottom_texts: list[str] = []

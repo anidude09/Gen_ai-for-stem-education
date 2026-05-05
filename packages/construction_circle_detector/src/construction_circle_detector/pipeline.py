@@ -56,7 +56,16 @@ def detect_circles(img: np.ndarray) -> list[dict]:
             except Exception as e:
                 print(f"[circle_detector] Circle {idx} OCR future failed: {e}")
 
-        return [results_map[i] for i in sorted(results_map)]
+        all_results = [results_map[i] for i in sorted(results_map)]
+        # Drop circles where OCR found no text — geometric false positives
+        meaningful = [
+            r for r in all_results
+            if r.get("circle_text") or r.get("page_number")
+        ]
+        dropped = len(all_results) - len(meaningful)
+        if dropped:
+            print(f"[circle_detector] Dropped {dropped} empty circle(s) (no text detected)")
+        return meaningful
 
     except Exception as e:
         print(f"[circle_detector] Circle detection error: {e}")

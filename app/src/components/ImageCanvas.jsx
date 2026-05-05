@@ -5,6 +5,7 @@ import ShapeOverlay from "./ShapeOverlay";
 import Popup from "./Popup";
 import ZoomControls from "./ZoomControls";
 import { logActivity } from "../utils/activityLogger";
+import { scaleCircles, scaleTexts } from "../utils/scaleShapes";
 import { API_BASE_URL } from "../config";
 
 function ImageCanvas({
@@ -29,10 +30,7 @@ function ImageCanvas({
   zoomIn,
   zoomOut,
   highlightCircleText,
-  hideControls,
-  onVlmDetect,
-  highlightedTextBox,     // {id, category} of text box to highlight from VLM click
-  vlmResult,              // VLM analysis for drawing context in explanations
+  vlmResult,
 }) {
   const wrapperRef = useRef(null);
 
@@ -70,13 +68,6 @@ function ImageCanvas({
       const formData = new FormData();
       formData.append("file", blob, "image.png");
 
-      // Fire VLM analysis in parallel (non-blocking)
-      if (onVlmDetect) {
-        onVlmDetect(blob, null).catch((err) =>
-          console.warn("VLM fire-and-forget error:", err)
-        );
-      }
-
       logActivity({
         sessionId,
         eventType: "detect_full_image_start",
@@ -96,24 +87,8 @@ function ImageCanvas({
 
       setRawCircles(rawCircles);
       setRawTexts(rawTexts);
-
-      const scaledCircles = rawCircles.map((c) => ({
-        ...c,
-        x: c.x * imageInfo.scaleX,
-        y: c.y * imageInfo.scaleY,
-        r: c.r * Math.min(imageInfo.scaleX, imageInfo.scaleY),
-      }));
-
-      const scaledTexts = rawTexts.map((t) => ({
-        ...t,
-        x1: t.x1 * imageInfo.scaleX,
-        y1: t.y1 * imageInfo.scaleY,
-        x2: t.x2 * imageInfo.scaleX,
-        y2: t.y2 * imageInfo.scaleY,
-      }));
-
-      setCircles(scaledCircles);
-      setTexts(scaledTexts);
+      setCircles(scaleCircles(rawCircles, imageInfo));
+      setTexts(scaleTexts(rawTexts, imageInfo));
 
       logActivity({
         sessionId,
@@ -175,12 +150,6 @@ function ImageCanvas({
       formData.append("w", String(w));
       formData.append("h", String(h));
 
-      if (onVlmDetect) {
-        onVlmDetect(blob, { x, y, w, h }).catch((err) =>
-          console.warn("VLM region fire-and-forget error:", err)
-        );
-      }
-
       const res = await fetch(`${API_BASE_URL}/detect/region-detect`, {
         method: "POST",
         body: formData,
@@ -194,24 +163,8 @@ function ImageCanvas({
 
       setRawCircles(rawCircles);
       setRawTexts(rawTexts);
-
-      const scaledCircles = rawCircles.map((c) => ({
-        ...c,
-        x: c.x * imageInfo.scaleX,
-        y: c.y * imageInfo.scaleY,
-        r: c.r * Math.min(imageInfo.scaleX, imageInfo.scaleY),
-      }));
-
-      const scaledTexts = rawTexts.map((t) => ({
-        ...t,
-        x1: t.x1 * imageInfo.scaleX,
-        y1: t.y1 * imageInfo.scaleY,
-        x2: t.x2 * imageInfo.scaleX,
-        y2: t.y2 * imageInfo.scaleY,
-      }));
-
-      setCircles(scaledCircles);
-      setTexts(scaledTexts);
+      setCircles(scaleCircles(rawCircles, imageInfo));
+      setTexts(scaleTexts(rawTexts, imageInfo));
 
       logActivity({
         sessionId,
@@ -301,8 +254,7 @@ function ImageCanvas({
         <ZoomControls zoom={zoom} zoomIn={zoomIn} zoomOut={zoomOut} />
       )}
 
-      {!hideControls && (
-        <div style={{ margin: "8px 0" }}>
+      <div style={{ margin: "8px 0" }}>
           <button
             onClick={runDetection}
             disabled={!imageInfo || isDetecting}
@@ -321,7 +273,6 @@ function ImageCanvas({
             {isDetecting ? "Detecting..." : "Detect in selection"}
           </button>
         </div>
-      )}
 
       {isDetecting && (
         <div className="loading-bar" role="status" aria-label="Detecting">
@@ -371,7 +322,6 @@ function ImageCanvas({
                 selection={selection}
                 onShapeClick={handleShapeSelected}
                 highlightCircleText={highlightCircleText}
-                highlightedTextBox={highlightedTextBox}
               />
               {selectedShape && (
                 <Popup

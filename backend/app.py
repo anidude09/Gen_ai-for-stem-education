@@ -1,11 +1,13 @@
 import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["ANONYMIZED_TELEMETRY"] = "False" # Stop ChromaDB POSTHOG errors
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse, FileResponse
 
-from routes import detect, llm, auth, regions_detect, llm_images, activity_log, vlm
+from routes import detect, llm, auth, regions_detect, activity_log, vlm, chat
 
 app = FastAPI()
 
@@ -21,9 +23,10 @@ app.include_router(detect.router, prefix="/detect", tags=["Detection"])
 app.include_router(llm.router, prefix="/llm", tags=["LLM"])
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(regions_detect.router, prefix="/detect", tags=["Region Detection"])
-app.include_router(llm_images.router, prefix="/llm-images", tags=["LLM Images"])
+
 app.include_router(activity_log.router)
 app.include_router(vlm.router, prefix="/vlm", tags=["VLM"])
+app.include_router(chat.router, prefix="/chat", tags=["Agent Chat"])
 
 
 @app.get("/healthz")

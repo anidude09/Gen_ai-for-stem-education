@@ -22,19 +22,45 @@ def get_paddle_ocr():
         if _PADDLE_OCR is not None:
             return _PADDLE_OCR
 
-        print("[construction_ocr] Loading PaddleOCR models (GPU) …")
+        print("[construction_ocr] Loading PaddleOCR models …")
         try:
             import os
+            import logging
             os.environ["PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK"] = "True"
+            # Suppress PaddlePaddle C++ (GLOG) warnings — must be set before paddle import
+            os.environ.setdefault("GLOG_minloglevel", "2")
+            os.environ.setdefault("GLOG_logtostderr", "0")
+            # Suppress Python-level ppocr logger
+            ppocr_logger = logging.getLogger("ppocr")
+            ppocr_logger.setLevel(logging.ERROR)
+            ppocr_logger.propagate = False
+            logging.getLogger("ppocr.utils.utility").setLevel(logging.ERROR)
+            
+            # Check if GPU is available via PaddlePaddle
+            use_gpu = False
+            try:
+                import paddle
+                cuda_compiled = paddle.device.is_compiled_with_cuda()
+                gpu_count = paddle.device.cuda.device_count() if cuda_compiled else 0
+                use_gpu = cuda_compiled and gpu_count > 0
+                if use_gpu:
+                    print(f"[construction_ocr] PaddlePaddle GPU detected: {paddle.device.get_device()} ({gpu_count} device(s))")
+                else:
+                    print("[construction_ocr] PaddlePaddle CPU only (no CUDA or no GPU found)")
+            except Exception:
+                print("[construction_ocr] Could not detect PaddlePaddle device, defaulting to CPU")
+            
             from paddleocr import PaddleOCR
             _PADDLE_OCR = PaddleOCR(
+                use_gpu=use_gpu,
                 use_textline_orientation=True,
                 lang="en",
                 ocr_version="PP-OCRv4",
                 use_doc_orientation_classify=False,
                 use_doc_unwarping=False,
+                show_log=False,
             )
-            print("[construction_ocr] PaddleOCR ready (GPU)")
+            print(f"[construction_ocr] PaddleOCR ready ({'GPU' if use_gpu else 'CPU'})")
         except Exception as _e:
             print(f"[construction_ocr] PaddleOCR init failed: {_e}")
             _PADDLE_OCR = None
@@ -63,9 +89,32 @@ def run_paddle_ocr(img_bgr: np.ndarray) -> list[tuple]:
 
     results = []
     try:
-        for page in ocr.predict(img_rgb):
-            if page is None:
+        # Check if using PaddleOCR 3.x (PaddleX wrapper) or 2.x natively
+        if hasattr(ocr, "predict"):
+            pages = ocr.predict(img_rgb)
+        else:
+            pages = ocr.ocr(img_rgb, cls=False)
+
+        for page in pages:
+            if not page:
                 continue
+            
+            # Handle PaddleOCR 2.x API output: page is a list of lines [ [quad_points], (text, score) ]
+            if isinstance(page, list):
+                for line in page:
+                    if not line or len(line) < 2: continue
+                    quad = line[0]
+                    text = line[1][0]
+                    conf = line[1][1]
+                    
+                    if float(conf) < OCR_MIN_CONFIDENCE or not str(text).strip():
+                        continue
+                        
+                    pts = [[float(p[0]), float(p[1])] for p in quad]
+                    results.append((pts, str(text).strip(), float(conf)))
+                continue
+
+            # Handle PaddleOCR 3.x API output (PaddleX objects/dicts)
             try:
                 if hasattr(page, "rec_texts"):
                     quads  = page.dt_polys
@@ -85,8 +134,10 @@ def run_paddle_ocr(img_bgr: np.ndarray) -> list[tuple]:
                     results.append((pts, text, conf))
             except Exception as e:
                 print(f"[construction_ocr] OCR page parse error: {e}")
+                
     except Exception as e:
-        print(f"[construction_ocr] PaddleOCR predict error: {e}")
+        print(f"[construction_ocr] PaddleOCR processing error: {e}")
+        
     return results
 
 

@@ -14,7 +14,7 @@ const CATEGORY_COLORS = {
   other: { stroke: "#64748b", fill: "rgba(100,116,139,0.25)" },
 };
 
-function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, highlightCircleText, highlightedTextBox }) {
+function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, highlightCircleText }) {
   const handleShapeClick = (e, shape) => {
     e.preventDefault();
     e.stopPropagation();
@@ -40,19 +40,6 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, high
     );
   };
 
-  // Determine if a text box is the VLM-linked highlight
-  const isTextHighlighted = (t) => {
-    if (!highlightedTextBox) return false;
-    return t.id === highlightedTextBox.id;
-  };
-
-  // Get category color for highlighted text box
-  const getHighlightColor = () => {
-    if (!highlightedTextBox) return CATEGORY_COLORS.other;
-    const cat = (highlightedTextBox.category || "other").toLowerCase();
-    return CATEGORY_COLORS[cat] || CATEGORY_COLORS.other;
-  };
-
   // Filter out text boxes that fall inside any detected circle
   const isTextInsideCircle = (t) => {
     const textCx = (t.x1 + t.x2) / 2;
@@ -68,7 +55,6 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, high
   };
 
   const visibleTexts = texts.filter(t => !isTextInsideCircle(t));
-  const hlColor = getHighlightColor();
 
   return (
     <svg
@@ -131,14 +117,16 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, high
 
       {circles.map((c) => {
         const hl = isCircleHighlighted(c);
+        // Circles that reference a page (have page_number) are navigable → blue
+        const hasPage = c.page_number && c.page_number.trim() !== "";
         return (
           <circle
             key={`circle-${c.id}`}
             cx={c.x}
             cy={c.y}
             r={c.r}
-            fill={hl ? "rgba(59, 130, 246, 0.28)" : "rgba(255, 140, 50, 0.15)"}
-            stroke={hl ? "#2563eb" : "#f97316"}
+            fill={hl ? "rgba(59, 130, 246, 0.28)" : hasPage ? "rgba(59, 130, 246, 0.15)" : "rgba(239, 68, 68, 0.12)"}
+            stroke={hl ? "#2563eb" : hasPage ? "#3b82f6" : "#ef4444"}
             strokeWidth={hl ? "3" : "1.5"}
             onClick={(e) => handleShapeClick(e, c)}
             style={{ cursor: "pointer", pointerEvents: "all" }}
@@ -146,25 +134,9 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, high
         );
       })}
 
-      {/* VLM-linked text highlight */}
-      {highlightedTextBox && visibleTexts.filter(isTextHighlighted).map((t) => (
-        <rect
-          key={`text-highlight-${t.id}`}
-          x={t.x1 - 4}
-          y={t.y1 - 4}
-          width={t.x2 - t.x1 + 8}
-          height={t.y2 - t.y1 + 8}
-          fill="none"
-          stroke={hlColor.stroke}
-          strokeWidth="3"
-          rx="3"
-          className="text-highlight-pulse"
-          style={{ pointerEvents: "none" }}
-        />
-      ))}
+
 
       {visibleTexts.map((t) => {
-        const hl = isTextHighlighted(t);
         return (
           <rect
             key={`text-${t.id}`}
@@ -172,10 +144,9 @@ function ShapeOverlay({ imageInfo, circles, texts, selection, onShapeClick, high
             y={t.y1}
             width={t.x2 - t.x1}
             height={t.y2 - t.y1}
-            fill={hl ? hlColor.fill : "rgba(0,200,0,0.08)"}
-            stroke={hl ? hlColor.stroke : "rgba(0,180,0,0.45)"}
-            strokeWidth={hl ? "3" : "1"}
-            rx={hl ? "2" : "0"}
+            fill={"rgba(0,200,0,0.08)"}
+            stroke={"rgba(0,180,0,0.45)"}
+            strokeWidth={"1"}
             onClick={(e) => handleShapeClick(e, t)}
             style={{ cursor: "pointer", pointerEvents: "all" }}
           />

@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 
 from construction_vlm_analyzer import analyze_drawing
+from prompts import VLM_MAX_LONG_SIDE, VLM_DETAIL, VLM_FORMAT, VLM_SYSTEM_PROMPT, vlm_user_prompt
 
 # ── VLM CSV log ──────────────────────────────────────────────────────
 _VLM_LOG_PATH: Path = Path(__file__).resolve().parent.parent / "vlm_log.csv"
@@ -108,7 +109,15 @@ async def vlm_analyze(
             mode = "region"
 
         # DELEGATE TO VLM ANALYZER PACKAGE
-        result = analyze_drawing(img, crop_region=crop_region, detail_context=detail_context)
+        result = analyze_drawing(
+            img,
+            crop_region=crop_region,
+            system_prompt=VLM_SYSTEM_PROMPT,
+            user_prompt=vlm_user_prompt(detail_context),
+            detail=VLM_DETAIL,
+            max_long_side=VLM_MAX_LONG_SIDE,
+            image_format=VLM_FORMAT,
+        )
 
         # Logging
         analysis = result["analysis"]

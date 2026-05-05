@@ -8,7 +8,6 @@ import json
 from typing import Optional
 
 from construction_llm_explainer.clients import get_openai_client, get_groq_client
-from construction_llm_explainer.prompts import build_system_prompt, build_user_prompt
 
 
 def _parse_llm_json(raw: str) -> Optional[dict]:
@@ -35,14 +34,20 @@ def _parse_llm_json(raw: str) -> Optional[dict]:
 def explain_term(
     text: str,
     rag_context: str = "",
-    drawing_context_str: str = ""
+    drawing_context_str: str = "",
+    system_prompt: str = None,
+    user_prompt: str = None,
 ) -> dict:
     """
     Generate a structured JSON explanation from LLM.
     Tries GPT-4o first, falls back to Groq Llama-3.3-70b.
+
+    system_prompt and user_prompt must be provided — build them in backend/prompts.py.
     """
-    system_msg = build_system_prompt(rag_context, drawing_context_str)
-    user_msg = build_user_prompt(text)
+    if system_prompt is None or user_prompt is None:
+        raise ValueError("system_prompt and user_prompt are required — build them from backend/prompts.py")
+    system_msg = system_prompt
+    user_msg = user_prompt
 
     raw = None
 

@@ -5,9 +5,9 @@ services:
     ports:
       - "8001:8001"
 
-    # API keys from .env file
+    # API keys from .env file (lives at backend/.env — copy .env.example there)
     env_file:
-      - .env
+      - backend/.env
 
     # Mount local data/ folder (PDFs, terms, dictionary images)
     volumes:

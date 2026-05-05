@@ -31,11 +31,12 @@ function Popup({ selectedShape, onClose, zoom = 1, onNavigateToPage, sessionId, 
       });
     }
 
-    fetch(`${API_BASE_URL}/llm-images/explain_with_images`, {
+    fetch(`${API_BASE_URL}/llm/generate_info_structured`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         content: selectedShape.text || "Unlabeled text",
+        include_images: true,
         drawing_context: vlmResult ? {
           drawing_type: vlmResult.drawing_type,
           summary: vlmResult.summary,
